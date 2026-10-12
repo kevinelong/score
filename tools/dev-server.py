@@ -36,7 +36,9 @@ class Handler(SimpleHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def translate_path(self, path):
-        # everything under /15ball/ maps onto the clone's root
+        # everything under /15ball/ maps onto the clone's root; drop the query and fragment first,
+        # or a scoring link like live.html?t=slug looks for a file literally named "live.html?t=slug"
+        path = path.split("#", 1)[0].split("?", 1)[0]
         rel = path[len(PREFIX):].lstrip("/") or "index.html"
         return os.path.join(REF, *rel.split("/"))
 
@@ -71,7 +73,19 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
+    def _redirect(self, location):
+        self.send_response(302)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def _dispatch(self):
+        # The console lives under a prefix, so a bare root should land there, and the prefix without
+        # its trailing slash must be redirected - otherwise relative script paths inside the console
+        # resolve against / and silently fail to load.
+        if self.path.split("?", 1)[0] in ("", "/", PREFIX):
+            self._redirect(PREFIX + "/")
+            return
         if self.path.startswith(PREFIX + "/api/"):
             self._proxy()
         elif self.path.startswith(PREFIX + "/"):

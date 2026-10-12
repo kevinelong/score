@@ -192,6 +192,24 @@ listed below as a decision rather than assumed.
   as two live versions there. The design's rule is no server changes, so it is recorded rather than
   fixed.
 
+## Deployment note
+
+The web console is served from a path prefix while the API is served by the Go process on loopback, so
+the host needs both a root that lands people on the console and an API proxy:
+
+```nginx
+location = /          { return 302 /15ball/; }
+location = /15ball    { return 301 /15ball/; }          # trailing slash matters, see below
+location /15ball/api/ { proxy_pass http://127.0.0.1:8093/api/; }
+location /15ball/     { root /srv/15ball; }             # the static console
+```
+
+The second line is not cosmetic: `…/15ball` without the trailing slash serves the console, but its
+relative script and link paths then resolve against `/` and the page silently loads no JavaScript. A
+scoring link always carries `/15ball/live.html`, so this only bites people who type the tournament URL
+by hand — which is exactly what a person does when they want to watch a board. `tools/dev-server.py`
+mirrors all of it locally, redirects included.
+
 ## Open decisions
 
 1. **Can we add `/.well-known/assetlinks.json`** to the deployment (a file on their host, no server
