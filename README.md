@@ -302,6 +302,7 @@ tools/run-emulator.sh                        boot it headless (WHPX)
 tools/verify-ui.sh                           drive the app and print the behavioural trace
 tools/probe_screens.py                       pixel-probe screenshots (panel colours, divider, glyphs)
 tools/make-release-key.sh                    one-off: the 4096-bit release signing key
+tools/bootstrap-go.sh                        portable Go, for the reference tournament server
 verify/                                      phone/AVD screenshots from the current build (probe inputs)
 LICENSE                                      FSL-1.1-MIT (source-available; MIT after two years)
 dl/, toolchain/, build/, out/                generated (see .gitignore)
