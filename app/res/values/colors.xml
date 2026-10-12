@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- window / divider: the whole palette is the previous one at half saturation (HSV S x 0.5) -->
+    <color name="bg">#FF0E1013</color>
+
+    <!-- HOME: white on half-saturated green (4.6:1) -->
+    <color name="home_bg">#FF4B805F</color>
+    <color name="home_text">#FFFFFFFF</color>
+
+    <!-- AWAY: half-saturated mustard on half-saturated tomato (4.0:1) -->
+    <color name="away_bg">#FF99635B</color>
+    <color name="away_text">#FFFFE8A4</color>
+
+    <!-- step tiles: one green, one red, both desaturated by 25% (S = 75%) -->
+    <color name="plus_tile">#FF1B6B39</color>
+    <color name="plus_tile_pressed">#FF16582F</color>
+    <color name="minus_tile">#FF852E21</color>
+    <color name="minus_tile_pressed">#FF6D261B</color>
+    <color name="tile_text">#FFFFFFFF</color>
+
+    <!-- neutral tiles stay translucent black, so they are just a shade of their own panel -->
+    <color name="btn_overlay">#26000000</color>
+    <color name="btn_overlay_pressed">#4D000000</color>
+    <color name="reset_overlay">#1A000000</color>
+    <color name="reset_overlay_pressed">#40000000</color>
+    <color name="btn_edge">#33FFFFFF</color>
+    <color name="score_press">#1F000000</color>
+
+    <color name="accent">#FF94DEAF</color>
+    <color name="icon_bg">#FF0E1013</color>
+</resources>

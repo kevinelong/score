@@ -1,0 +1,8 @@
+dl/
+toolchain/
+build/
+out/
+__pycache__/
+*.pyc
+tools/release.keystore
+tools/release-credentials.txt

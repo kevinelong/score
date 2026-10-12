@@ -1,0 +1,7 @@
+# The shell scripts, Python tools and resource files must keep LF endings: a CR in the shebang or in
+# the middle of a pipeline breaks `sh build.sh` on this machine.
+* text=auto eol=lf
+
+*.png binary
+*.apk binary
+*.keystore binary
