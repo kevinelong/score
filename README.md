@@ -305,6 +305,7 @@ tools/make-release-key.sh                    one-off: the 4096-bit release signi
 tools/bootstrap-go.sh                        portable Go, for the reference tournament server
 verify/                                      phone/AVD screenshots from the current build (probe inputs)
 LICENSE                                      FSL-1.1-MIT (source-available; MIT after two years)
+docs/LINKED-MATCH-DESIGN.md                  linked-match mode: server protocol + design
 dl/, toolchain/, build/, out/                generated (see .gitignore)
 tools/release.keystore, tools/release-credentials.txt   secrets - git-ignored, back up off-machine
 ```
@@ -444,6 +445,18 @@ distribution repository (`kevinelong/score-android`, a separate repo from this s
 release-signed APK, a `v1.0` GitHub Release, screenshots, and the install/use/privacy text a stranger
 needs. Publishing a new version means: bump the version, rebuild, copy the artifact over, commit there
 and cut a new release.
+
+## Linked match mode (design)
+
+The app is being extended to open a tournament **scoring link** — the same link the tournament
+director already shares as a QR code — load that match from the live server, score it and submit the
+result. If the app is not installed, the same link opens the tournament's web console in the browser.
+The server is `kevinelong/15ball-scoresheet` (Go + SQLite) and needs no change for this.
+
+The protocol, the exact call sequence, the score-payload convention, the App Links / browser-fallback
+mechanics, and the consequences for this app's permissions and privacy claims are written up in
+**[docs/LINKED-MATCH-DESIGN.md](docs/LINKED-MATCH-DESIGN.md)** — with every fact verified against a
+running server rather than read from their documentation.
 
 ## Licence
 
