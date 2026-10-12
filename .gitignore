@@ -6,3 +6,4 @@ __pycache__/
 *.pyc
 tools/release.keystore
 tools/release-credentials.txt
+tools/debug.keystore

@@ -2,9 +2,9 @@
 
 Single-screen score keeper for two teams: **HOME on the left**, **AWAY on the right**.
 Two artifacts come out of the build, both SHA-256'd in `out/`. The build is byte-for-byte
-reproducible (the DEX entry timestamp is pinned to the DOS epoch aapt2 uses), so these hashes identify
-the *source revision* rather than the moment the build ran - which is what makes a published hash
-worth anything:
+reproducible (the DEX entry timestamp is pinned to the DOS epoch aapt2 uses), so - given the same
+signing keys - these hashes identify the *source revision* rather than the moment the build ran, which
+is what makes a published hash worth anything:
 
 | Artifact | Size | Purpose |
 | --- | --- | --- |
@@ -393,8 +393,9 @@ both store and key. Both files are git-ignored. The APK is signed with **v1 + v2
 makes it installable on API 21-23, v2/v3 cover everything newer. `build.sh` runs `apksigner verify
 --print-certs`, checks that neither `debuggable` nor `testOnly` is in the shipped manifest, and prints
 the badging - so a release cannot be produced without those checks passing. Rebuilds are byte-identical
-(see the artifact table above), so the hash published alongside a download can be reproduced from the
-source by anyone.
+given the same signing keys (see the artifact table above): the payload is reproducible from source by
+anyone, and the published release APK only by whoever holds this keystore - which is the point of
+guarding it.
 
 Three things worth internalising:
 
