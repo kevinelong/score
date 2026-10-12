@@ -28,4 +28,9 @@
 
     <color name="accent">#FF94DEAF</color>
     <color name="icon_bg">#FF0E1013</color>
+
+    <!-- linked match mode bar -->
+    <color name="linked_bar">#FF121820</color>
+    <color name="linked_text">#FFE6EDF3</color>
+    <color name="linked_text_dim">#FF9FB3C8</color>
 </resources>

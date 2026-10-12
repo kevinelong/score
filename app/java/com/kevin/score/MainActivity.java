@@ -4,6 +4,8 @@ import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputFilter;
 import android.text.InputType;
@@ -16,8 +18,14 @@ import android.view.animation.LinearInterpolator;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 
 /**
  * Single-screen score keeper.
@@ -49,6 +57,7 @@ public class MainActivity extends Activity {
 
     private static final String STATE_SCORES = "scores";
     private static final String STATE_NAMES = "names";
+    private static final String STATE_LINK = "link";
 
     private final int[] score = new int[2];
     private final String[] name = {DEFAULT_NAME[HOME], DEFAULT_NAME[AWAY]};
@@ -57,6 +66,27 @@ public class MainActivity extends Activity {
     private final View[] plusButton = new View[2];
     private final View[] minusButton = new View[2];
     private final View[] resetButton = new View[2];
+
+    // ---- linked match mode: set only when the app is opened from a tournament scoring link
+
+    private View linkedBar;
+    private TextView linkedStatus;
+    private TextView linkedNote;
+    private TextView linkedAction;
+    private Uri linkUri;
+    private TournamentApi.Link link;
+    private TournamentApi api;
+    private TournamentApi.Tournament tournament;
+    private TournamentApi.Match match;
+    private String homeEntrantId;
+    private String awayEntrantId;
+    /** False until the link has resolved into a match; the action then retries the load. */
+    private boolean loaded;
+    /** True once the result is on the server; the action then offers a correction instead. */
+    private boolean submitted;
+    /** Reused across retries, so a submit that actually landed is never recorded twice. */
+    private String submitKey;
+    private boolean busy;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -90,6 +120,54 @@ public class MainActivity extends Activity {
                 step(side, delta);
             }
         });
+
+        linkedBar = findViewById(R.id.linked_bar);
+        linkedStatus = (TextView) findViewById(R.id.linked_status);
+        linkedNote = (TextView) findViewById(R.id.linked_note);
+        linkedAction = (TextView) findViewById(R.id.linked_action);
+        findViewById(R.id.linked_exit).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                leaveLinkedMode();
+            }
+        });
+        linkedAction.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (busy) {
+                    return;
+                }
+                if (!loaded) {
+                    if (linkUri != null) {
+                        openLink(linkUri);
+                    }
+                    return;
+                }
+                if (submitted) {
+                    askForCorrectionReason();
+                } else {
+                    askWhoWon();
+                }
+            }
+        });
+
+        handleLink(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleLink(intent);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (linkUri != null) {
+            leaveLinkedMode();
+            return;
+        }
+        super.onBackPressed();
     }
 
     @Override
@@ -97,6 +175,9 @@ public class MainActivity extends Activity {
         super.onSaveInstanceState(out);
         out.putIntArray(STATE_SCORES, new int[] {score[HOME], score[AWAY]});
         out.putStringArray(STATE_NAMES, new String[] {name[HOME], name[AWAY]});
+        if (linkUri != null) {
+            out.putString(STATE_LINK, linkUri.toString());
+        }
     }
 
     // ---------------------------------------------------------------- state
@@ -114,6 +195,10 @@ public class MainActivity extends Activity {
         if (savedNames != null && savedNames.length == 2) {
             name[HOME] = sanitize(savedNames[HOME], HOME);
             name[AWAY] = sanitize(savedNames[AWAY], AWAY);
+        }
+        String savedLink = state.getString(STATE_LINK);
+        if (savedLink != null) {
+            linkUri = Uri.parse(savedLink);
         }
     }
 
@@ -184,6 +269,9 @@ public class MainActivity extends Activity {
         plusButton[side].setContentDescription(getString(R.string.cd_plus, label));
         minusButton[side].setContentDescription(getString(R.string.cd_minus, label));
         resetButton[side].setContentDescription(getString(R.string.cd_reset, label));
+        if (linkedBar != null && linkedBar.getVisibility() == View.VISIBLE) {
+            nameView[side].setContentDescription(label);
+        }
     }
 
     // ---------------------------------------------------------- score sizing
@@ -214,6 +302,445 @@ public class MainActivity extends Activity {
         view.setTextSize(TypedValue.COMPLEX_UNIT_PX, size);
     }
 
+    // ------------------------------------------------------- linked match mode
+
+    /** Opens whatever link the intent carries, or the one restored after process death. */
+    private void handleLink(Intent intent) {
+        Uri data = intent == null ? null : intent.getData();
+        if (data == null) {
+            data = linkUri;
+        }
+        if (data != null) {
+            openLink(data);
+        }
+    }
+
+    private void openLink(Uri uri) {
+        final TournamentApi.Link parsed;
+        try {
+            parsed = TournamentApi.parseLink(uri);
+        } catch (TournamentApi.ApiError e) {
+            Toast.makeText(this, e.label(), Toast.LENGTH_LONG).show();
+            return;
+        }
+        linkUri = uri;
+        link = parsed;
+        api = TournamentApi.forLink(parsed);
+        tournament = null;
+        match = null;
+        homeEntrantId = null;
+        awayEntrantId = null;
+        loaded = false;
+        submitted = false;
+        submitKey = null;
+        busy = false;
+
+        linkedBar.setVisibility(View.VISIBLE);
+        linkedNote.setVisibility(View.GONE);
+        setStatus(getString(R.string.linked_loading));
+        setAction(getString(R.string.linked_submit), false);
+
+        inBackground(new Runnable() {
+            @Override
+            public void run() {
+                load();
+            }
+        });
+    }
+
+    /** Reads the tournament, its entrants and its matches, then decides which match to score. */
+    private void load() {
+        try {
+            TournamentApi.Tournament[] found = api.tournament(link.tournament);
+            if (found.length == 0) {
+                throw new TournamentApi.ApiError(0, "bad_response", "No tournament in the response");
+            }
+            final TournamentApi.Tournament found1 = found[0];
+            final List<TournamentApi.Entrant> entrants = api.entrants(found1.id);
+            final List<TournamentApi.Match> matches = api.matches(found1.id);
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    tournament = found1;
+                    chooseMatch(entrants, matches);
+                }
+            });
+        } catch (final TournamentApi.ApiError e) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    loaded = false;
+                    setStatus(e.label());
+                    setAction(getString(R.string.linked_retry), true);
+                }
+            });
+        }
+    }
+
+    /**
+     * Prefers a match actually being played, then one waiting to start, then one already recorded -
+     * the link names the tournament but not the match, which is how the director's QR works too.
+     */
+    private void chooseMatch(List<TournamentApi.Entrant> entrants, List<TournamentApi.Match> matches) {
+        List<TournamentApi.Match> candidates = withState(matches, "in_progress", "reopened");
+        if (candidates.isEmpty()) {
+            candidates = withState(matches, "scheduled", "assigned");
+        }
+        if (candidates.isEmpty()) {
+            candidates = withState(matches, "completed");
+        }
+        if (candidates.isEmpty()) {
+            setStatus(tournament.isScorable()
+                    ? getString(R.string.linked_no_matches)
+                    : getString(R.string.linked_not_started));
+            return;
+        }
+        if (candidates.size() == 1) {
+            applyMatch(entrants, candidates.get(0));
+            return;
+        }
+        final List<TournamentApi.Match> options = candidates;
+        final CharSequence[] labels = new CharSequence[options.size()];
+        for (int i = 0; i < options.size(); i++) {
+            TournamentApi.Match m = options.get(i);
+            labels[i] = nameOf(entrants, m.entrantAId) + " vs " + nameOf(entrants, m.entrantBId)
+                    + " \u2014 " + m.describe();
+        }
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.linked_pick_title)
+                .setItems(labels, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        applyMatch(entrants, options.get(which));
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void applyMatch(List<TournamentApi.Entrant> entrants, TournamentApi.Match chosen) {
+        match = chosen;
+        homeEntrantId = emptyToNull(chosen.entrantAId);
+        awayEntrantId = emptyToNull(chosen.entrantBId);
+        name[HOME] = nameOf(entrants, homeEntrantId);
+        name[AWAY] = nameOf(entrants, awayEntrantId);
+        score[HOME] = MIN_SCORE;
+        score[AWAY] = MIN_SCORE;
+        loaded = true;
+        submitted = chosen.isComplete();
+        submitKey = null;
+        refresh(HOME);
+        refresh(AWAY);
+
+        setStatus(tournament.name + " \u00b7 " + chosen.describe());
+        if (submitted) {
+            String winner = winnerNameFor(chosen.winnerEntrantId);
+            linkedNote.setText(winner == null
+                    ? getString(R.string.linked_recorded_anonymous)
+                    : getString(R.string.linked_recorded_name, winner));
+            linkedNote.setVisibility(View.VISIBLE);
+            setAction(getString(R.string.linked_correct), true);
+        } else {
+            linkedNote.setVisibility(View.GONE);
+            setAction(getString(R.string.linked_submit), homeEntrantId != null && awayEntrantId != null);
+        }
+    }
+
+    /** The server wants a winner: the tallies ride along, the tap decides who won. */
+    private void askWhoWon() {
+        String body = getString(R.string.linked_tallies, name[HOME], format(score[HOME]),
+                name[AWAY], format(score[AWAY]))
+                + "\n\n" + getString(R.string.linked_winner_hint);
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.linked_winner_title)
+                .setMessage(body)
+                .setPositiveButton(name[HOME], new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int which) {
+                        submit(HOME);
+                    }
+                })
+                .setNegativeButton(name[AWAY], new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int which) {
+                        submit(AWAY);
+                    }
+                })
+                .setNeutralButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void submit(int winnerSide) {
+        final String winnerId = winnerSide == HOME ? homeEntrantId : awayEntrantId;
+        final String loserId = winnerSide == HOME ? awayEntrantId : homeEntrantId;
+        if (winnerId == null || loserId == null) {
+            setStatus(getString(R.string.linked_no_matches));
+            return;
+        }
+        if (submitKey == null) {
+            submitKey = UUID.randomUUID().toString();
+        }
+        final String key = submitKey;
+        final JSONObject scores = buildScores();
+        final TournamentApi.Match target = match;
+        final TournamentApi.Tournament t = tournament;
+        setBusy(getString(R.string.linked_recording));
+
+        inBackground(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (target.needsStart()) {
+                        api.assign(t.id, target.id);
+                        api.start(t.id, target.id);
+                    }
+                    api.submitResult(t.id, target.id, winnerId, loserId, scores, key);
+                    // Re-read: the match object in the submit response does not carry the winner.
+                    final TournamentApi.Match updated = find(api.matches(t.id), target.id);
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            onRecorded(updated, winnerId);
+                        }
+                    });
+                } catch (final TournamentApi.ApiError e) {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            onRecordFailed(e, t, target);
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    private void onRecorded(TournamentApi.Match updated, String winnerId) {
+        if (updated != null) {
+            match = updated;
+        }
+        submitted = true;
+        submitKey = null;
+        setBusy(null);
+        setStatus(getString(R.string.linked_recorded, winnerNameFor(winnerId),
+                format(score[HOME]), format(score[AWAY])));
+        linkedNote.setText(R.string.linked_recorded_anonymous);
+        linkedNote.setVisibility(View.VISIBLE);
+        setAction(getString(R.string.linked_correct), true);
+    }
+
+    private void onRecordFailed(final TournamentApi.ApiError e, final TournamentApi.Tournament t,
+                               final TournamentApi.Match target) {
+        setBusy(null);
+        if (e.isConflict()) {
+            // Someone else finished this match: show what the server now holds rather than an error.
+            inBackground(new Runnable() {
+                @Override
+                public void run() {
+                    TournamentApi.Match fresh = null;
+                    try {
+                        fresh = find(api.matches(t.id), target.id);
+                    } catch (TournamentApi.ApiError ignored) {
+                        // fall through to the error path
+                    }
+                    final TournamentApi.Match updated = fresh;
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (updated != null && updated.isComplete()) {
+                                onRecorded(updated, updated.winnerEntrantId);
+                            } else {
+                                setStatus(e.label());
+                                setAction(getString(R.string.linked_retry), true);
+                            }
+                        }
+                    });
+                }
+            });
+            return;
+        }
+        setStatus(e.label());
+        if (e.isOffline()) {
+            linkedNote.setText(R.string.linked_offline_retry);
+            linkedNote.setVisibility(View.VISIBLE);
+        }
+        // The same idempotency key is kept, so a retry cannot record the result twice.
+        setAction(getString(R.string.linked_retry), true);
+    }
+
+    private void askForCorrectionReason() {
+        final EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setText(R.string.linked_reopen_default);
+        input.setSelectAllOnFocus(true);
+        int pad = dp(24);
+        FrameLayout box = new FrameLayout(this);
+        box.setPadding(pad, dp(8), pad, 0);
+        box.addView(input, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT));
+
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.linked_reopen_title)
+                .setView(box)
+                .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int which) {
+                        String reason = input.getText().toString().trim();
+                        reopen(reason.isEmpty() ? getString(R.string.linked_reopen_default) : reason);
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    /** A reason is mandatory server-side; the result is superseded, not deleted. */
+    private void reopen(final String reason) {
+        final TournamentApi.Tournament t = tournament;
+        final TournamentApi.Match target = match;
+        setBusy(getString(R.string.linked_recording));
+        inBackground(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    api.reopen(t.id, target.id, reason, UUID.randomUUID().toString());
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            submitted = false;
+                            submitKey = null;
+                            setBusy(null);
+                            setStatus(getString(R.string.linked_reopened));
+                            linkedNote.setVisibility(View.GONE);
+                            setAction(getString(R.string.linked_submit), true);
+                        }
+                    });
+                } catch (final TournamentApi.ApiError e) {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            setBusy(null);
+                            setStatus(e.label());
+                            setAction(getString(R.string.linked_correct), true);
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    /** Back to a plain scoreboard: nothing of the match survives, and nothing is submitted. */
+    private void leaveLinkedMode() {
+        linkedBar.setVisibility(View.GONE);
+        linkUri = null;
+        link = null;
+        api = null;
+        tournament = null;
+        match = null;
+        homeEntrantId = null;
+        awayEntrantId = null;
+        loaded = false;
+        submitted = false;
+        submitKey = null;
+        busy = false;
+        score[HOME] = MIN_SCORE;
+        score[AWAY] = MIN_SCORE;
+        name[HOME] = DEFAULT_NAME[HOME];
+        name[AWAY] = DEFAULT_NAME[AWAY];
+        refresh(HOME);
+        refresh(AWAY);
+    }
+
+    /** The payload the server stores verbatim: their {"score":"a-b"} convention plus our detail. */
+    private JSONObject buildScores() {
+        JSONObject scores = new JSONObject();
+        try {
+            scores.put("score", score[HOME] + "-" + score[AWAY]);
+            scores.put("home", score[HOME]);
+            scores.put("away", score[AWAY]);
+            scores.put("homeName", name[HOME]);
+            scores.put("awayName", name[AWAY]);
+            scores.put("discipline", "15ball_rotation");
+            scores.put("app", "score-android");
+            scores.put("appVersion", 1);
+        } catch (JSONException ignored) {
+            // JSONObject.put only throws on NaN/infinite numbers, which ints cannot be
+        }
+        return scores;
+    }
+
+    private void setStatus(String text) {
+        linkedStatus.setText(text);
+    }
+
+    private void setAction(String label, boolean enabled) {
+        linkedAction.setText(label);
+        linkedAction.setEnabled(enabled);
+        linkedAction.setAlpha(enabled ? 1f : 0.5f);
+    }
+
+    private void setBusy(String label) {
+        busy = label != null;
+        if (label != null) {
+            setAction(label, false);
+        }
+    }
+
+    private void inBackground(final Runnable work) {
+        new Thread(work).start();
+    }
+
+    private String winnerNameFor(String entrantId) {
+        if (entrantId == null) {
+            return null;
+        }
+        if (entrantId.equals(homeEntrantId)) {
+            return name[HOME];
+        }
+        if (entrantId.equals(awayEntrantId)) {
+            return name[AWAY];
+        }
+        return null;
+    }
+
+    private static List<TournamentApi.Match> withState(List<TournamentApi.Match> matches, String... states) {
+        List<TournamentApi.Match> out = new java.util.ArrayList<TournamentApi.Match>();
+        for (TournamentApi.Match m : matches) {
+            for (String state : states) {
+                if (state.equals(m.state)) {
+                    out.add(m);
+                    break;
+                }
+            }
+        }
+        return out;
+    }
+
+    private static TournamentApi.Match find(List<TournamentApi.Match> matches, String id) {
+        for (TournamentApi.Match m : matches) {
+            if (m.id.equals(id)) {
+                return m;
+            }
+        }
+        return null;
+    }
+
+    private static String nameOf(List<TournamentApi.Entrant> entrants, String entrantId) {
+        if (entrantId == null) {
+            return "TBD";
+        }
+        for (TournamentApi.Entrant e : entrants) {
+            if (entrantId.equals(e.id)) {
+                return e.displayName;
+            }
+        }
+        return "TBD";
+    }
+
+    private static String emptyToNull(String value) {
+        return value == null || value.isEmpty() ? null : value;
+    }
+
     // -------------------------------------------------------------- renaming
 
     /**
@@ -242,6 +769,9 @@ public class MainActivity extends Activity {
             public boolean onTouch(View v, MotionEvent event) {
                 switch (event.getActionMasked()) {
                     case MotionEvent.ACTION_DOWN:
+                        if (linkedBar != null && linkedBar.getVisibility() == View.VISIBLE) {
+                            return true;   // names come from the tournament while a link is open
+                        }
                         v.removeCallbacks(fire);
                         v.postDelayed(fire, DWELL_MS);
                         fade.cancel();

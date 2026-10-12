@@ -17,4 +17,27 @@
     <string name="cd_plus">Increase %1$s score</string>
     <string name="cd_minus">Decrease %1$s score</string>
     <string name="cd_reset">Reset %1$s score to zero</string>
+
+    <!-- Linked match mode: the app opened from a tournament scoring link -->
+    <string name="linked_loading">Loading the match\u2026</string>
+    <string name="linked_submit">Submit result</string>
+    <string name="linked_recording">Recording\u2026</string>
+    <string name="linked_retry">Retry</string>
+    <string name="linked_correct">Correct result</string>
+    <string name="linked_exit">Scoreboard mode</string>
+    <string name="linked_winner_title">Who won?</string>
+    <string name="linked_winner_hint">The tallies above are sent with the result.</string>
+    <string name="linked_pick_title">Which match?</string>
+    <string name="linked_reopen_title">Correcting the result</string>
+    <string name="linked_reopen_reason">Reason</string>
+    <string name="linked_reopen_default">score correction</string>
+    <string name="linked_recorded">Recorded: %1$s won %2$s\u2013%3$s</string>
+    <string name="linked_recorded_name">Recorded: %1$s won</string>
+    <string name="linked_tallies">%1$s %2$s   \u00b7   %3$s %4$s</string>
+    <string name="linked_reopened">Reopened \u2014 submit the corrected result</string>
+    <string name="linked_recorded_anonymous">Recorded without signing in \u2014 the server keeps no name with it</string>
+    <string name="linked_not_started">That tournament has not started yet</string>
+    <string name="linked_no_matches">No match is ready to score</string>
+    <string name="linked_names_from_server">Team names come from the tournament</string>
+    <string name="linked_offline_retry">Kept your tallies \u2014 retry sends the same result, so it cannot be recorded twice</string>
 </resources>

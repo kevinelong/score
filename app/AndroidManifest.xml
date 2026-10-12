@@ -1,16 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.kevin.score"
-    android:versionCode="1"
-    android:versionName="1.0">
+    android:versionCode="2"
+    android:versionName="1.1">
 
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
+
+    <!--
+      Only used in linked-match mode: when the app is opened from a tournament scoring link it reads
+      that match from the tournament server and submits the result. Standalone scoring never touches
+      the network, and nothing is collected or sent anywhere else.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:theme="@style/AppTheme"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="false">
 
         <activity
@@ -22,6 +30,37 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+              Tournament scoring links: the app opens when it is installed, the browser when it is
+              not. Verification requires the host to serve
+              https://codeonline.io/.well-known/assetlinks.json naming this package and the signing
+              certificate; without it Android offers a chooser instead, and everything still works.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="codeonline.io"
+                    android:pathPrefix="/15ball/" />
+            </intent-filter>
+
+            <!--
+              Development form of the same thing. A LAN test server cannot prove ownership of an
+              https host, so testing uses  scoreboard://match?url=<scoring link>  which carries the
+              full link. The app only accepts links whose path ends in live.html and that carry a
+              tournament, so this cannot be pointed at arbitrary content.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="scoreboard"
+                    android:host="match" />
             </intent-filter>
         </activity>
     </application>

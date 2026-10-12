@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Production talks https only. Cleartext is permitted for exactly the development servers this app is
+  tested against: a LAN host running the real tournament server, the emulator's alias for the host
+  machine, and localhost. None of them is reachable from outside the local network, and no other
+  cleartext traffic is allowed at all.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <domain includeSubdomains="false">192.168.12.118</domain>
+    </domain-config>
+</network-security-config>

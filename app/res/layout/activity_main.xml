@@ -1,64 +1,223 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.kevin.score.SwipePanel xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/root"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="horizontal"
-    android:background="@color/bg"
-    android:baselineAligned="false">
+    android:orientation="vertical"
+    android:background="@color/bg">
 
-    <!-- HOME: white on green. Swipe up/down anywhere on this half to move its score. -->
-    <LinearLayout
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
+    <!-- The scoreboard proper. SwipePanel owns the swipe gesture; the bar below is outside it. -->
+    <com.kevin.score.SwipePanel
+        android:id="@+id/root"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
         android:layout_weight="1"
+        android:orientation="horizontal"
+        android:background="@color/bg"
+        android:baselineAligned="false">
+
+        <!-- HOME: white on green. Swipe up/down anywhere on this half to move its score. -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:background="@color/home_bg"
+            android:padding="12dp">
+
+            <TextView
+                android:id="@+id/home_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:letterSpacing="0.08"
+                android:text="@string/team_home"
+                android:textColor="@color/home_text"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:contentDescription="@string/cd_name" />
+
+            <TextView
+                android:id="@+id/home_score"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:background="@drawable/score_press"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:typeface="monospace"
+                android:text="00"
+                android:textColor="@color/home_text"
+                android:textSize="96sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/home_minus"
+                    style="@style/StepButton"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/btn_minus"
+                    android:text="@string/minus"
+                    android:textColor="@color/tile_text" />
+
+                <Space
+                    android:layout_width="12dp"
+                    android:layout_height="1dp" />
+
+                <Button
+                    android:id="@+id/home_plus"
+                    style="@style/StepButton"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/btn_plus"
+                    android:text="@string/plus"
+                    android:textColor="@color/tile_text" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/home_reset"
+                style="@style/ResetButton"
+                android:layout_width="match_parent"
+                android:layout_marginTop="12dp"
+                android:text="@string/reset"
+                android:textColor="@color/home_text" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="2dp"
+            android:layout_height="match_parent"
+            android:background="@color/bg" />
+
+        <!-- AWAY: mustard on tomato. Swipe up/down anywhere on this half to move its score. -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:background="@color/away_bg"
+            android:padding="12dp">
+
+            <TextView
+                android:id="@+id/away_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:letterSpacing="0.08"
+                android:text="@string/team_away"
+                android:textColor="@color/away_text"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:contentDescription="@string/cd_name" />
+
+            <TextView
+                android:id="@+id/away_score"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:background="@drawable/score_press"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:typeface="monospace"
+                android:text="00"
+                android:textColor="@color/away_text"
+                android:textSize="96sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/away_minus"
+                    style="@style/StepButton"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/btn_minus"
+                    android:text="@string/minus"
+                    android:textColor="@color/tile_text" />
+
+                <Space
+                    android:layout_width="12dp"
+                    android:layout_height="1dp" />
+
+                <Button
+                    android:id="@+id/away_plus"
+                    style="@style/StepButton"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/btn_plus"
+                    android:text="@string/plus"
+                    android:textColor="@color/tile_text" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/away_reset"
+                style="@style/ResetButton"
+                android:layout_width="match_parent"
+                android:layout_marginTop="12dp"
+                android:text="@string/reset"
+                android:textColor="@color/away_text" />
+        </LinearLayout>
+    </com.kevin.score.SwipePanel>
+
+    <!-- Linked match mode: hidden unless the app was opened from a tournament scoring link. -->
+    <LinearLayout
+        android:id="@+id/linked_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:background="@color/home_bg"
-        android:padding="12dp">
+        android:background="@color/linked_bar"
+        android:padding="12dp"
+        android:visibility="gone">
 
         <TextView
-            android:id="@+id/home_name"
+            android:id="@+id/linked_status"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp"
-            android:maxLines="1"
-            android:ellipsize="end"
-            android:includeFontPadding="false"
-            android:letterSpacing="0.08"
-            android:text="@string/team_home"
-            android:textColor="@color/home_text"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:contentDescription="@string/cd_name" />
+            android:textColor="@color/linked_text"
+            android:textSize="14sp"
+            android:maxLines="3"
+            android:ellipsize="end" />
 
         <TextView
-            android:id="@+id/home_score"
+            android:id="@+id/linked_note"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:background="@drawable/score_press"
-            android:gravity="center"
-            android:includeFontPadding="false"
-            android:typeface="monospace"
-            android:text="00"
-            android:textColor="@color/home_text"
-            android:textSize="96sp"
-            android:textStyle="bold" />
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textColor="@color/linked_text_dim"
+            android:textSize="12sp"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:visibility="gone" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
             android:orientation="horizontal">
 
             <Button
-                android:id="@+id/home_minus"
-                style="@style/StepButton"
+                android:id="@+id/linked_action"
+                style="@style/BarButton"
                 android:layout_width="0dp"
-                android:layout_weight="1"
-                android:background="@drawable/btn_minus"
-                android:text="@string/minus"
+                android:layout_weight="2"
+                android:background="@drawable/btn_plus"
+                android:text="@string/linked_submit"
                 android:textColor="@color/tile_text" />
 
             <Space
@@ -66,103 +225,13 @@
                 android:layout_height="1dp" />
 
             <Button
-                android:id="@+id/home_plus"
-                style="@style/StepButton"
+                android:id="@+id/linked_exit"
+                style="@style/BarButton"
                 android:layout_width="0dp"
                 android:layout_weight="1"
-                android:background="@drawable/btn_plus"
-                android:text="@string/plus"
-                android:textColor="@color/tile_text" />
+                android:background="@drawable/btn_reset"
+                android:text="@string/linked_exit"
+                android:textColor="@color/linked_text" />
         </LinearLayout>
-
-        <Button
-            android:id="@+id/home_reset"
-            style="@style/ResetButton"
-            android:layout_width="match_parent"
-            android:layout_marginTop="12dp"
-            android:text="@string/reset"
-            android:textColor="@color/home_text" />
     </LinearLayout>
-
-    <View
-        android:layout_width="2dp"
-        android:layout_height="match_parent"
-        android:background="@color/bg" />
-
-    <!-- AWAY: mustard on tomato. Swipe up/down anywhere on this half to move its score. -->
-    <LinearLayout
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="1"
-        android:orientation="vertical"
-        android:background="@color/away_bg"
-        android:padding="12dp">
-
-        <TextView
-            android:id="@+id/away_name"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp"
-            android:maxLines="1"
-            android:ellipsize="end"
-            android:includeFontPadding="false"
-            android:letterSpacing="0.08"
-            android:text="@string/team_away"
-            android:textColor="@color/away_text"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:contentDescription="@string/cd_name" />
-
-        <TextView
-            android:id="@+id/away_score"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:background="@drawable/score_press"
-            android:gravity="center"
-            android:includeFontPadding="false"
-            android:typeface="monospace"
-            android:text="00"
-            android:textColor="@color/away_text"
-            android:textSize="96sp"
-            android:textStyle="bold" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/away_minus"
-                style="@style/StepButton"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:background="@drawable/btn_minus"
-                android:text="@string/minus"
-                android:textColor="@color/tile_text" />
-
-            <Space
-                android:layout_width="12dp"
-                android:layout_height="1dp" />
-
-            <Button
-                android:id="@+id/away_plus"
-                style="@style/StepButton"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:background="@drawable/btn_plus"
-                android:text="@string/plus"
-                android:textColor="@color/tile_text" />
-        </LinearLayout>
-
-        <Button
-            android:id="@+id/away_reset"
-            style="@style/ResetButton"
-            android:layout_width="match_parent"
-            android:layout_marginTop="12dp"
-            android:text="@string/reset"
-            android:textColor="@color/away_text" />
-    </LinearLayout>
-</com.kevin.score.SwipePanel>
+</LinearLayout>

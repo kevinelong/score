@@ -8,8 +8,8 @@ is what makes a published hash worth anything:
 
 | Artifact | Size | Purpose |
 | --- | --- | --- |
-| `out/score.apk` | 58,684 bytes, `c2f0d259…46ca1d2` | debug-signed, for the dev loop (`sh build.sh`) |
-| `out/score-release.apk` | 62,774 bytes, `4b69eba8…f0107de` | release-signed with the project's own 4096-bit key (`SIGN=release sh build.sh`) |
+| `out/score.apk` | 71,053 bytes, `62cd8dc0…ef21ae5` | debug-signed, for the dev loop (`sh build.sh`) |
+| `out/score-release.apk` | 79,239 bytes, `3d218767…94a8aae` | release-signed with the project's own 4096-bit key (`SIGN=release sh build.sh`) |
 
 ## Behaviour
 
@@ -28,7 +28,10 @@ is what makes a published hash worth anything:
 - Scores and names survive rotation (the activity handles the configuration change in place)
   and process death (saved instance state).
 - The screen stays awake while the app is open - a scoreboard that sleeps mid-match is useless.
-- Zero permissions. No network access, no ads, no analytics, no third-party libraries.
+- Zero permissions in everyday use. Standalone scoring — the app opened normally — uses no network at
+  all. **Linked match mode is the exception** (see below): it holds `INTERNET` so it can read the match
+  you opened from a link and submit its result, and it talks to no other host. No ads, no analytics and
+  no third-party libraries either way.
 
 ## Build
 
@@ -117,8 +120,8 @@ Everything the UI does is deliberately boring and framework-native. The interest
 - **Rotation handled in place** (`configChanges`) with state also written to
   `onSaveInstanceState`, so nothing is lost and no flicker occurs, and process death is covered too.
 - **Dark theme, keep-screen-on, haptic tick on button press** - field usability for a scoreboard
-  used at arm's length. **Zero permissions** falls out of the design; `performHapticFeedback`
-  needs none.
+  used at arm's length. `performHapticFeedback` needs no permission, and neither does anything else -
+  until linked match mode, which adds `INTERNET` for one host: the server the open link points at.
 - **No persistence of names across app restarts.** Renaming is cheap and a stale name from last
   week's match is worse than a blank one. This is revisited in the deferred phase below.
 
@@ -300,6 +303,8 @@ tools/sdkmanager.sh                          sdkmanager wrapper with the right J
 tools/make-avd.sh                            create the throwaway verification AVD
 tools/run-emulator.sh                        boot it headless (WHPX)
 tools/verify-ui.sh                           drive the app and print the behavioural trace
+tools/drive-ui.py                            drive a device by its widget tree (dump/tap/swipe/hold/shot)
+tools/dev-server.py                          local mirror of the nginx mapping for linked-match work
 tools/probe_screens.py                       pixel-probe screenshots (panel colours, divider, glyphs)
 tools/make-release-key.sh                    one-off: the 4096-bit release signing key
 tools/bootstrap-go.sh                        portable Go, for the reference tournament server
@@ -430,11 +435,13 @@ Decide these **before** the first public release, because they are effectively p
 - **Package name** - `com.kevin.score` today. Publishing fixes it; changing it later is a different
   app with no upgrade path, so choose the final name now (a domain you control, or the common
   `io.github.<you>.<app>` convention).
-- **versionCode / versionName** - every upload needs a higher versionCode (now `1` / `1.0`).
+- **versionCode / versionName** - every upload needs a higher versionCode (now `2` / `1.1`, raised when
+  linked match mode shipped).
 - **Licence** - decided: **`FSL-1.1-MIT`**, described below and applied to both repositories. Still
-  open: a one-paragraph privacy policy. This app collects nothing, has no network access and no
-  third-party SDKs, so the policy is trivial - but reviews ask for it and the data-safety declaration
-  is easier once it is written down.
+  open: a one-paragraph privacy policy. The app collects nothing, has no third-party SDKs and no
+  analytics; the only network use is linked match mode, which talks to the host of the link you opened
+  and sends nothing beyond that match's result. Writing that down is trivial - but reviews ask for it,
+  and the data-safety declaration is easier once it is written.
 
 For this app the honest recommendation is **direct APK + the Samsung Galaxy Store**: with no server,
 no accounts and no data, the expensive parts of Play (AAB, targetSdk 36, the 12-tester gate) buy
@@ -446,17 +453,37 @@ release-signed APK, a `v1.0` GitHub Release, screenshots, and the install/use/pr
 needs. Publishing a new version means: bump the version, rebuild, copy the artifact over, commit there
 and cut a new release.
 
-## Linked match mode (design)
+## Linked match mode
 
-The app is being extended to open a tournament **scoring link** — the same link the tournament
-director already shares as a QR code — load that match from the live server, score it and submit the
-result. If the app is not installed, the same link opens the tournament's web console in the browser.
-The server is `kevinelong/15ball-scoresheet` (Go + SQLite) and needs no change for this.
+Open a tournament **scoring link** — the same link the tournament director shares as a QR code — and
+the app loads that match from the live server, scores it and submits the result. Without the app
+installed, that same link opens the tournament's web console in a browser. The server is
+`kevinelong/15ball-scoresheet` (Go + SQLite), and the app speaks its protocol without any change to it.
 
-The protocol, the exact call sequence, the score-payload convention, the App Links / browser-fallback
-mechanics, and the consequences for this app's permissions and privacy claims are written up in
-**[docs/LINKED-MATCH-DESIGN.md](docs/LINKED-MATCH-DESIGN.md)** — with every fact verified against a
-running server rather than read from their documentation.
+- **Standalone scoring is untouched**: no link, no network, no permission used.
+- **The entrants become HOME and AWAY.** Taps and swipes tally them; **Submit result** asks which side
+  won and records it, and **Correct result** reopens a recorded match to fix it (the server requires a
+  reason, and keeps the previous result as a new version).
+- **Retry is idempotent**: the same `Idempotency-Key` is reused, so a submit that actually landed is
+  never recorded twice, and a failure keeps the tallies.
+- **The link opens the app when installed and the browser when not** (Android App Links). Development
+  uses `scoreboard://match?url=…`, because a LAN test server cannot prove ownership of an https host,
+  and the app only accepts links whose path ends in `live.html` and that carry a tournament.
+- `INTERNET` is the one permission this adds, and it is used only for the host in the link you opened.
+
+The protocol, the exact call sequence, the score-payload convention and the verification log are in
+**[docs/LINKED-MATCH-DESIGN.md](docs/LINKED-MATCH-DESIGN.md)**. To exercise it locally:
+
+```sh
+# the real server on 127.0.0.1:8093 with open scoring, then the nginx-mapping mirror
+python tools/dev-server.py 8080
+# point a device at a match (10.0.2.2 is the host, as seen from the emulator)
+adb shell am start -a android.intent.action.VIEW \
+  -d "scoreboard://match?url=http%3A%2F%2F10.0.2.2%3A8080%2F15ball%2Flive.html%3Ft%3Dt_live_001"
+```
+
+`python tools/drive-ui.py` drives a device by reading its widget tree (dump / tap / swipe / hold /
+shot), which is how the linked flow was verified screen by screen.
 
 ## Licence
 

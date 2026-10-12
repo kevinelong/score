@@ -38,8 +38,8 @@ echo "== aapt2 link =="
   --java "$WIN/build/gen" \
   --min-sdk-version 21 \
   --target-sdk-version 34 \
-  --version-code 1 \
-  --version-name 1.0 \
+  --version-code 2 \
+  --version-name 1.1 \
   "$WIN/build/res.zip"
 
 echo "== javac =="

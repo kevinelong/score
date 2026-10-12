@@ -9,7 +9,21 @@ link opens the tournament's web console in the browser instead.
 The server is **kevinelong/15ball-scoresheet** (Go + SQLite, nginx in front). Nothing in this design
 requires a change to it.
 
-Status: design + protocol verified against a running server. The app side is not implemented yet.
+Status: **implemented in the app and verified end to end** against a running server — open a link,
+score the match, submit, correct. See "Verified" below for what was exercised.
+
+## A scoring link in action
+
+```sh
+# 1. the real server, with their seed fixtures and open scoring on
+DATABASE_PATH=<dir>/fifteenball.db OPEN_MATCH_EDITING=1 toolchain/go/bin/go.exe \
+  run ./cmd/fifteenball-server            # from the 15ball-scoresheet clone
+# 2. the local mirror of their nginx mapping (web console + /15ball/api -> :8093)
+python tools/dev-server.py 8080
+# 3. the link, in the development form that needs no assetlinks.json
+adb shell am start -a android.intent.action.VIEW \
+  -d "scoreboard://match?url=http%3A%2F%2F10.0.2.2%3A8080%2F15ball%2Flive.html%3Ft%3Dt_live_001"
+```
 
 ## The link
 
@@ -148,11 +162,41 @@ listed below as a decision rather than assumed.
   and `reopen` returns `400 reason_required` rather than a CSRF-style failure when the reason is
   missing.
 
+### In the app, on the emulator
+
+- Opening the scoring link loads the tournament and offers the scoreable matches with their real
+  labels ("Player 5 vs Player 6 — in_progress", "Player 1 vs Player 2 — reopened"); with exactly one
+  candidate it goes straight to the board instead of asking.
+- The entrants become HOME and AWAY, taps and swipes tally them, and **Submit result** asks who won
+  and records it. The app showed `Recorded: Player 1 won 05–03`, and the server held `match_results`
+  v1 with winner `e_t_live_001_1` and the payload
+
+  ```json
+  {"score":"5-3","home":5,"away":3,"homeName":"Player 1","awayName":"Player 2",
+   "discipline":"15ball_rotation","app":"score-android","appVersion":1}
+  ```
+
+- **Correct result** reopened the match with a reason; the second submit flipped the winner, and the
+  server held v2 with `reopened_from_result_id` set and the audit trail
+  `result_submitted → reopened → result_submitted` (actors NULL, which is what open editing means).
+- Two bugs found here and fixed. Mine: the success path touched views from the worker thread
+  (`CalledFromWrongThreadException` raised out of `onRecorded`), which killed the app *after* the server
+  had accepted the result — only the error path had been marshalled; the fix is to post the whole
+  callback to the UI thread. And environmental: the emulator still held a release-signed build, so
+  installing the debug APK failed with `INSTALL_FAILED_UPDATE_INCOMPATIBLE` until it was uninstalled,
+  because the new intent filter only exists in the new build.
+- An observation about their code, not a change made: submitting after a reopen does not set
+  `superseded_by` on the earlier result, because `SubmitResult` inserts the new row without touching
+  the old one. The app is unaffected (the board queries the highest `result_version`), but their
+  session-gated match-history endpoint filters on `superseded_by IS NULL`, so a corrected match reads
+  as two live versions there. The design's rule is no server changes, so it is recorded rather than
+  fixed.
+
 ## Open decisions
 
 1. **Can we add `/.well-known/assetlinks.json`** to the deployment (a file on their host, no server
    code change) so the link opens the app directly instead of a chooser? If not, the chooser path is
    the fallback and everything still works.
-2. **Winner selection** — the design says "tap the side that won". Alternative: infer from the
-   tallies and only ask on a tie.
+2. **Winner selection** — implemented as designed: **tap the side that won**, with the tallies sent as
+   the payload. Inferring from the tallies (asking only on a tie) remains an option if you prefer it.
 3. **Which host to verify against** — the local server built here, or a deployed instance.
