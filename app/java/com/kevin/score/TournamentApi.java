@@ -128,12 +128,15 @@ final class TournamentApi {
         final String name;
         final String state;
         final String visibility;
+        /** The discipline the director chose, e.g. "15ball_rotation" — free-form, so never assumed. */
+        final String game;
 
-        Tournament(String id, String name, String state, String visibility) {
+        Tournament(String id, String name, String state, String visibility, String game) {
             this.id = id;
             this.name = name;
             this.state = state;
             this.visibility = visibility;
+            this.game = game;
         }
 
         boolean isScorable() {
@@ -212,7 +215,7 @@ final class TournamentApi {
         JSONObject t = body.optJSONObject("tournament");
         if (t != null) {
             out.add(new Tournament(t.optString("id"), t.optString("name"), t.optString("state"),
-                    t.optString("visibility")));
+                    t.optString("visibility"), t.optString("game")));
         } else if (divisions == null) {
             throw new ApiError(0, "bad_response", "No tournament in the response");
         }

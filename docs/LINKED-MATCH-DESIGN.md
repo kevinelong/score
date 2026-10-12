@@ -112,6 +112,63 @@ Offline and failures: a failed submit keeps the tallies, shows why, and offers r
 `Idempotency-Key`**, so a submit that actually landed cannot be duplicated. `404`/`409` are terminal
 and explain themselves ("this match is already final").
 
+### Races, driven through the app
+
+Against `t_race_001` — a 9-ball tournament (`game: "9ball"`), in-progress match Avery vs Blake:
+
+| Step | Evidence |
+| --- | --- |
+| Open the link | board shows **Avery / Blake**, status "Thursday 9-Ball (race to 11) · in_progress", race line "Race to — · tap to set goals" |
+| Set a handicap | race line becomes **"Race to 3 – 2 · tap to change"** |
+| Tally Avery to 3 | prompt: "Race over · Avery has reached 3 · Avery 03 · Blake 00 · Submit the result, or keep editing if that was a mistake" |
+| Keep editing | nothing submitted, tallies and action unchanged |
+| Tap + again | **no prompt** (already acknowledged) |
+| Drop to 02 and back to 03 | prompt returns (re-armed) |
+| Submit from the prompt | app: "Recorded: Avery won 03–00"; server: `match_results` v1, winner `e_t_race_001_1` (the side that reached its goal), match completed |
+
+The recorded payload, verbatim:
+
+```json
+{"score":"3-0","home":3,"away":0,"homeName":"Avery","awayName":"Blake","discipline":"9ball",
+ "app":"score-android","appVersion":1,"homeGoal":3,"awayGoal":2,"raceTo":3}
+```
+
+Note `discipline` is the tournament's own `game`, not a hardcoded assumption — the first version of the
+app had written `15ball_rotation` unconditionally, which a 9-ball tournament would have recorded as a
+lie.
+
+## Races to a goal
+
+A tournament can be a simple race: first to eleven games, say. Each side carries **its own goal**, so
+uneven goals are a handicap — 11 against 9 — and the app treats the match as over when either side
+reaches theirs. It asks rather than assumes: **Submit result**, or **keep editing** if the tally was a
+mistake. Carry on past the goal and it does not nag; drop back below and reach it again and it asks
+again. The goals are set by tapping the race line in the linked bar, and blank means no goal, which is
+plain 15-ball behaviour.
+
+**Why the goal is set in the app and not read from the server:** there is nowhere on the server to keep
+it. `tournaments.game` is validated on create against a fixed list — `15ball_rotation`, `8ball`,
+`9ball`, `10ball`, `straight_14_1`, `bank_pool`, `one_pocket` — and is immutable afterwards, so a
+discipline string cannot carry "race to 11"; there is no race, best-of or target column on
+`tournaments`, `divisions` or `matches`; and the API reads the result `score` as `json.RawMessage` and
+stores it verbatim. Their own *offline* app has race concepts (`defaultRaceTo`, `raceLabel` in
+`app.js`) but never sends them — the cloud edition has none. So the app fills the gap from the client
+side, and the goal travels with the result, which is the only place it can persist:
+
+```json
+{"score":"3-0","home":3,"away":0,"homeName":"Avery","awayName":"Blake","discipline":"9ball",
+ "app":"score-android","appVersion":1,"homeGoal":3,"awayGoal":2,"raceTo":3}
+```
+
+Note `discipline` is whatever the director created the tournament with — the app reports the
+tournament's `game` verbatim instead of assuming 15-ball rotation, and a 9-ball tournament is creatable
+through their API today (`game: "9ball"`), even though their docs still describe v1 as 15-ball only.
+A consumer that reads only `.score` sees the familiar string.
+
+If races should ever be *first-class* — shown in their web console and OBS overlay, or enforced
+server-side — that needs a column on `divisions` or `matches`. That is a change to their server, so it
+is listed as an option rather than done.
+
 ## Opening the link in the app, or the browser
 
 Android **App Links**: the app declares an intent filter for

@@ -8,8 +8,8 @@ is what makes a published hash worth anything:
 
 | Artifact | Size | Purpose |
 | --- | --- | --- |
-| `out/score.apk` | 71,053 bytes, `62cd8dc0…ef21ae5` | debug-signed, for the dev loop (`sh build.sh`) |
-| `out/score-release.apk` | 79,239 bytes, `3d218767…94a8aae` | release-signed with the project's own 4096-bit key (`SIGN=release sh build.sh`) |
+| `out/score.apk` | 75,149 bytes, `2e60350b…3dc881` | debug-signed, for the dev loop (`sh build.sh`) |
+| `out/score-release.apk` | 79,239 bytes, `34c07de0…8cf0a5d` | release-signed with the project's own 4096-bit key (`SIGN=release sh build.sh`) |
 
 ## Behaviour
 
@@ -435,8 +435,8 @@ Decide these **before** the first public release, because they are effectively p
 - **Package name** - `com.kevin.score` today. Publishing fixes it; changing it later is a different
   app with no upgrade path, so choose the final name now (a domain you control, or the common
   `io.github.<you>.<app>` convention).
-- **versionCode / versionName** - every upload needs a higher versionCode (now `2` / `1.1`, raised when
-  linked match mode shipped).
+- **versionCode / versionName** - every upload needs a higher versionCode (now `3` / `1.2`, raised when
+  linked match mode shipped and again for race goals).
 - **Licence** - decided: **`FSL-1.1-MIT`**, described below and applied to both repositories. Still
   open: a one-paragraph privacy policy. The app collects nothing, has no third-party SDKs and no
   analytics; the only network use is linked match mode, which talks to the host of the link you opened
@@ -464,6 +464,10 @@ installed, that same link opens the tournament's web console in a browser. The s
 - **The entrants become HOME and AWAY.** Taps and swipes tally them; **Submit result** asks which side
   won and records it, and **Correct result** reopens a recorded match to fix it (the server requires a
   reason, and keeps the previous result as a new version).
+- **Races to a goal, per side.** Tap the race line to set a target for each side — uneven goals are a
+  handicap. When either side reaches theirs the app says the match is over and offers **Submit result**
+  or **keep editing**; carrying on past the goal does not nag, and dropping back below and re-reaching
+  it asks again. The goals travel in the result payload, because the server has nowhere to keep one.
 - **Retry is idempotent**: the same `Idempotency-Key` is reused, so a submit that actually landed is
   never recorded twice, and a failure keeps the tallies.
 - **The link opens the app when installed and the browser when not** (Android App Links). Development

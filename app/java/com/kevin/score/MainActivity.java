@@ -17,6 +17,7 @@ import android.view.WindowManager;
 import android.view.animation.LinearInterpolator;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -58,6 +59,7 @@ public class MainActivity extends Activity {
     private static final String STATE_SCORES = "scores";
     private static final String STATE_NAMES = "names";
     private static final String STATE_LINK = "link";
+    private static final String STATE_GOALS = "goals";
 
     private final int[] score = new int[2];
     private final String[] name = {DEFAULT_NAME[HOME], DEFAULT_NAME[AWAY]};
@@ -87,6 +89,11 @@ public class MainActivity extends Activity {
     /** Reused across retries, so a submit that actually landed is never recorded twice. */
     private String submitKey;
     private boolean busy;
+    /** Per-side race goals: 0 means no goal, and uneven goals are a handicap. */
+    private final int[] goal = {0, 0};
+    /** Set once a reached goal has been acknowledged, so the prompt does not nag on every point. */
+    private final boolean[] goalPrompted = {false, false};
+    private TextView linkedRace;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -151,6 +158,14 @@ public class MainActivity extends Activity {
             }
         });
 
+        linkedRace = (TextView) findViewById(R.id.linked_race);
+        linkedRace.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                openGoalsDialog();
+            }
+        });
+
         handleLink(getIntent());
     }
 
@@ -178,6 +193,7 @@ public class MainActivity extends Activity {
         if (linkUri != null) {
             out.putString(STATE_LINK, linkUri.toString());
         }
+        out.putIntArray(STATE_GOALS, new int[] {goal[HOME], goal[AWAY]});
     }
 
     // ---------------------------------------------------------------- state
@@ -199,6 +215,11 @@ public class MainActivity extends Activity {
         String savedLink = state.getString(STATE_LINK);
         if (savedLink != null) {
             linkUri = Uri.parse(savedLink);
+        }
+        int[] savedGoals = state.getIntArray(STATE_GOALS);
+        if (savedGoals != null && savedGoals.length == 2) {
+            goal[HOME] = clamp(savedGoals[HOME]);
+            goal[AWAY] = clamp(savedGoals[AWAY]);
         }
     }
 
@@ -243,6 +264,7 @@ public class MainActivity extends Activity {
         }
         score[side] = next;
         refresh(side);
+        checkGoal(side);
     }
 
     private void bindReset(final View button, final int side) {
@@ -427,6 +449,11 @@ public class MainActivity extends Activity {
         score[HOME] = MIN_SCORE;
         score[AWAY] = MIN_SCORE;
         loaded = true;
+        goal[HOME] = 0;
+        goal[AWAY] = 0;
+        goalPrompted[HOME] = false;
+        goalPrompted[AWAY] = false;
+        updateRaceLine();
         submitted = chosen.isComplete();
         submitKey = null;
         refresh(HOME);
@@ -645,10 +672,130 @@ public class MainActivity extends Activity {
         busy = false;
         score[HOME] = MIN_SCORE;
         score[AWAY] = MIN_SCORE;
+        goal[HOME] = 0;
+        goal[AWAY] = 0;
+        goalPrompted[HOME] = false;
+        goalPrompted[AWAY] = false;
+        updateRaceLine();
         name[HOME] = DEFAULT_NAME[HOME];
         name[AWAY] = DEFAULT_NAME[AWAY];
         refresh(HOME);
         refresh(AWAY);
+    }
+
+    // ------------------------------------------------------------- race goals
+
+    /**
+     * Each side has its own goal, so uneven goals are a handicap. Reaching one ends the match, but the
+     * app asks rather than assumes: a mistyped tally is common, so the prompt offers to submit or to
+     * carry on editing. Dropping back below the goal re-arms the prompt for that side.
+     */
+    private void checkGoal(int side) {
+        for (int s = HOME; s <= AWAY; s++) {
+            if (goal[s] == 0 || score[s] < goal[s]) {
+                goalPrompted[s] = false;
+            }
+        }
+        if (goal[side] > 0 && score[side] >= goal[side] && !goalPrompted[side]) {
+            goalPrompted[side] = true;
+            askToSubmitReachedGoal(side);
+        }
+    }
+
+    private void askToSubmitReachedGoal(final int side) {
+        if (!loaded || submitted || busy || match == null) {
+            return;
+        }
+        String message = getString(R.string.linked_goal_reached, name[side], goal[side])
+                + "\n\n" + getString(R.string.linked_tallies, name[HOME], format(score[HOME]),
+                name[AWAY], format(score[AWAY]))
+                + "\n\n" + getString(R.string.linked_goal_hint);
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.linked_goal_title)
+                .setMessage(message)
+                .setPositiveButton(R.string.linked_goal_submit, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int which) {
+                        submit(side);
+                    }
+                })
+                .setNegativeButton(R.string.linked_goal_keep, null)
+                .show();
+    }
+
+    private void updateRaceLine() {
+        if (linkedRace == null) {
+            return;
+        }
+        if (goal[HOME] == 0 && goal[AWAY] == 0) {
+            linkedRace.setText(R.string.linked_race_none);
+            return;
+        }
+        linkedRace.setText(getString(R.string.linked_race_fmt,
+                goal[HOME] == 0 ? "\u2014" : String.valueOf(goal[HOME]),
+                goal[AWAY] == 0 ? "\u2014" : String.valueOf(goal[AWAY])));
+    }
+
+    private void openGoalsDialog() {
+        if (!loaded) {
+            return;
+        }
+        final EditText homeInput = goalField(name[HOME], goal[HOME]);
+        final EditText awayInput = goalField(name[AWAY], goal[AWAY]);
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        int pad = dp(24);
+        box.setPadding(pad, dp(8), pad, 0);
+        box.addView(homeInput);
+        box.addView(awayInput);
+
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.linked_goals_title)
+                .setMessage(R.string.linked_goals_hint)
+                .setView(box)
+                .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int which) {
+                        goal[HOME] = parseGoal(homeInput.getText().toString());
+                        goal[AWAY] = parseGoal(awayInput.getText().toString());
+                        goalPrompted[HOME] = false;
+                        goalPrompted[AWAY] = false;
+                        updateRaceLine();
+                        checkGoal(HOME);
+                        checkGoal(AWAY);
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private EditText goalField(String hint, int value) {
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setHint(hint);
+        input.setContentDescription(hint);   // labels it for TalkBack and for the UI harness
+        input.setInputType(InputType.TYPE_CLASS_NUMBER);
+        input.setFilters(new InputFilter[] {new InputFilter.LengthFilter(2)});
+        if (value > 0) {
+            input.setText(String.valueOf(value));
+            input.setSelectAllOnFocus(true);   // typing replaces the old goal
+        }
+        return input;
+    }
+
+    private static int parseGoal(String raw) {
+        if (raw == null) {
+            return 0;
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return 0;
+        }
+        try {
+            return clamp(Integer.parseInt(trimmed));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     /** The payload the server stores verbatim: their {"score":"a-b"} convention plus our detail. */
@@ -660,9 +807,18 @@ public class MainActivity extends Activity {
             scores.put("away", score[AWAY]);
             scores.put("homeName", name[HOME]);
             scores.put("awayName", name[AWAY]);
-            scores.put("discipline", "15ball_rotation");
+            if (tournament != null && tournament.game != null && !tournament.game.isEmpty()) {
+                scores.put("discipline", tournament.game);   // whatever the director chose
+            }
             scores.put("app", "score-android");
             scores.put("appVersion", 1);
+            if (goal[HOME] > 0 || goal[AWAY] > 0) {
+                // The server has nowhere to keep a race, so the goal travels with the result - the
+                // only place it can persist. Uneven goals are a handicap, so both are recorded.
+                scores.put("homeGoal", goal[HOME]);
+                scores.put("awayGoal", goal[AWAY]);
+                scores.put("raceTo", Math.max(goal[HOME], goal[AWAY]));
+            }
         } catch (JSONException ignored) {
             // JSONObject.put only throws on NaN/infinite numbers, which ints cannot be
         }

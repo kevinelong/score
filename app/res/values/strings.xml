@@ -40,4 +40,15 @@
     <string name="linked_no_matches">No match is ready to score</string>
     <string name="linked_names_from_server">Team names come from the tournament</string>
     <string name="linked_offline_retry">Kept your tallies \u2014 retry sends the same result, so it cannot be recorded twice</string>
+
+    <!-- Race goals: each side has its own target, so uneven goals are a handicap -->
+    <string name="linked_race_none">Race to \u2014  \u00b7  tap to set goals</string>
+    <string name="linked_race_fmt">Race to %1$s \u2013 %2$s  \u00b7  tap to change</string>
+    <string name="linked_goals_title">Race goals</string>
+    <string name="linked_goals_hint">Leave a side blank for no goal. Uneven goals are a handicap.</string>
+    <string name="linked_goal_title">Race over</string>
+    <string name="linked_goal_reached">%1$s has reached %2$d.</string>
+    <string name="linked_goal_hint">Submit the result, or keep editing if that was a mistake.</string>
+    <string name="linked_goal_submit">Submit result</string>
+    <string name="linked_goal_keep">Keep editing</string>
 </resources>

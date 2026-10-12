@@ -31,11 +31,12 @@ def dump_tree():
 
 
 def find(xml, pattern):
-    """Centre of the first node whose text or resource id contains / equals the pattern."""
+    """Centre of the first node whose text, content description or resource id matches the pattern."""
     for tag in re.findall(r"<node[^>]*>", xml):
         d = dict(re.findall(r'([\w-]+)="([^"]*)"', tag))
         rid = (d.get("resource-id") or "").replace("com.kevin.score:id/", "")
-        if pattern in (d.get("text") or "") or pattern == rid:
+        desc = d.get("content-desc") or ""
+        if pattern in (d.get("text") or "") or pattern == rid or pattern in desc:
             m = re.findall(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", d.get("bounds", ""))
             if m:
                 x0, y0, x1, y1 = map(int, m[0])
@@ -67,6 +68,14 @@ def main():
         subprocess.run([ADB, "-s", SERIAL, "pull", "/sdcard/s.png",
                         os.path.join(root, "verify", name + ".png")], capture_output=True)
         print("captured verify/%s.png" % name)
+        return
+    if cmd == "type":
+        subprocess.run([ADB, "-s", SERIAL, "shell", "input", "text", sys.argv[2]])
+        print("typed %r" % sys.argv[2])
+        return
+    if cmd == "keyevent":
+        subprocess.run([ADB, "-s", SERIAL, "shell", "input", "keyevent", sys.argv[2]])
+        print("sent keyevent %s" % sys.argv[2])
         return
 
     pattern = sys.argv[2]
