@@ -303,6 +303,7 @@ tools/verify-ui.sh                           drive the app and print the behavio
 tools/probe_screens.py                       pixel-probe screenshots (panel colours, divider, glyphs)
 tools/make-release-key.sh                    one-off: the 4096-bit release signing key
 verify/                                      phone/AVD screenshots from the current build (probe inputs)
+LICENSE                                      FSL-1.1-MIT (source-available; MIT after two years)
 dl/, toolchain/, build/, out/                generated (see .gitignore)
 tools/release.keystore, tools/release-credentials.txt   secrets - git-ignored, back up off-machine
 ```
@@ -420,7 +421,7 @@ There is no single "publish" button; the routes differ a lot in cost. Requiremen
 | **Direct APK** (GitHub Releases, a web page) | Nothing beyond the signed APK. Users must allow sideloading (see the Samsung section). Since 30 Sep 2026 in BR/ID/SG/TH - globally from 2027 - certified devices want the developer registered; the free **limited distribution account** authorises **20 devices per package name**, so broad public reach implies full verification | Fastest to public, no review, no fee - but no discovery and a sideloading hurdle per user |
 | **Google Play** | $25 once; an **AAB**, which needs Gradle/AGP rather than this hand-rolled pipeline; **target API 36** for new apps and updates since 31 Aug 2026 (this build targets 34); for new *personal* accounts, a **closed test with 12 opted-in testers for 14 continuous days** before production; store listing (512x512 icon, 1024x500 feature graphic), data-safety form, content rating; Play App Signing | Real discovery, by far the most work |
 | **Samsung Galaxy Store** | Samsung seller account, uploads an APK, own review | Sensible given the target hardware |
-| **F-Droid** | A public source repo and a **Gradle** build it can reproduce; FLOSS licence | Free, no tracking; this app qualifies on dependencies (none) and network (none), but not on build system |
+| **F-Droid** | A public source repo and a **Gradle** build it can reproduce; a **FLOSS** licence | Ruled out by `FSL-1.1-MIT`: F-Droid ships only free licences, and Fair Source is deliberately not one. It also wants a Gradle build, which this pipeline is not |
 
 Decide these **before** the first public release, because they are effectively permanent:
 
@@ -428,9 +429,10 @@ Decide these **before** the first public release, because they are effectively p
   app with no upgrade path, so choose the final name now (a domain you control, or the common
   `io.github.<you>.<app>` convention).
 - **versionCode / versionName** - every upload needs a higher versionCode (now `1` / `1.0`).
-- **Licence**, and a one-paragraph privacy policy. This app collects nothing, has no network access
-  and no third-party SDKs, so the policy is trivial - but reviews ask for it and the data-safety
-  declaration is easier once it is written down.
+- **Licence** - decided: **`FSL-1.1-MIT`**, described below and applied to both repositories. Still
+  open: a one-paragraph privacy policy. This app collects nothing, has no network access and no
+  third-party SDKs, so the policy is trivial - but reviews ask for it and the data-safety declaration
+  is easier once it is written down.
 
 For this app the honest recommendation is **direct APK + the Samsung Galaxy Store**: with no server,
 no accounts and no data, the expensive parts of Play (AAB, targetSdk 36, the 12-tester gate) buy
@@ -441,6 +443,32 @@ distribution repository (`kevinelong/score-android`, a separate repo from this s
 release-signed APK, a `v1.0` GitHub Release, screenshots, and the install/use/privacy text a stranger
 needs. Publishing a new version means: bump the version, rebuild, copy the artifact over, commit there
 and cut a new release.
+
+## Licence
+
+**`FSL-1.1-MIT`** — the [Functional Source License](https://fsl.software/) 1.1, verbatim in
+[`LICENSE`](LICENSE) with the copyright line filled in, and applied to both this source repository and
+the public distribution repository so the app binary carries the same terms as the code.
+
+In plain words, what you may and may not do:
+
+- **You may** read, use, copy, modify and redistribute this software — including for commercial
+  purposes — for any purpose **except** a competing one. Internal use at a for-profit company is fine;
+  so are non-commercial education and research.
+- **You may not** make it available to others in a commercial product or service that substitutes for
+  this app or offers the same or substantially similar functionality. Republishing a rebranded build
+  as your own scoreboard app is the thing this forbids.
+- **You must** pass these terms along with any copies, modifications or derivatives, and keep the
+  copyright notice.
+- **On the second anniversary of each release, that release becomes plain MIT.** No permission needed,
+  no strings attached — that is the "delayed open source publication" half of the licence, and it is
+  irreversible.
+
+Two consequences worth stating plainly: this is **source-available, not OSI open source** (the
+non-compete clause is a field-of-use restriction, which is exactly why it cannot be open source), which
+means F-Droid and Linux-distro packaging are off the table. And the licence binds people who accept
+it — GitHub's own terms allow anyone to fork a public repository, so the protection here is a clear
+legal position against a *competing use*, not a technical block.
 
 ## Footprint
 
