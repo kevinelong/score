@@ -109,8 +109,10 @@ dialog_report() {
 
 echo "== relaunch from a clean state =="
 adbs shell am force-stop $APP
+adbs shell pm clear $APP >/dev/null 2>&1   # clear data, so the one-time hint is exercised too
 pin_portrait
 adbs shell am start -W -n $APP/.MainActivity | grep -E "Status|TotalTime"
+dump; echo "first-run hint: $(text_of hint)"
 sleep 2
 space_check
 
@@ -119,6 +121,7 @@ echo "== scoring =="
 report "initial"
 tap_id home_score
 report "tap home score (increments)"
+dump; echo "hint after the first point: $(text_of hint)"
 tap_id home_score
 report "tap home score again"
 tap_id home_plus
@@ -135,10 +138,10 @@ swipe_from home_score -260
 report "swipe up on home score (+1)"
 swipe_from home_score 260
 report "swipe down on home score (-1)"
-swipe_from away_score -260
-report "swipe up on away score (+1)"
 swipe_from away_score 260
-report "swipe down on away score (-1)"
+report "screen-down on the mirrored far half (+1 in that player's frame)"
+swipe_from away_score -260
+report "screen-up on the mirrored far half (-1 in that player's frame)"
 swipe_from home_plus -260
 report "swipe up starting on the + tile (must be +1, no press)"
 swipe_bare 16 900 640
@@ -150,6 +153,34 @@ report "home_minus x4 (floor at 0)"
 tap_id home_plus; tap_id home_plus; tap_id home_plus
 report "home_plus x3"
 echo "portrait geometry: home_score $(bounds_of home_score) away_score $(bounds_of away_score)"
+echo "mirror check: the far half's name $(bounds_of away_name) should sit below its score $(bounds_of away_score)"
+
+echo
+echo "== the centre bar flips the far half for a lone scorekeeper =="
+hold_id divider 900
+report "hold the centre bar (far half upright for the operator)"
+swipe_from away_score -260
+report "screen-up on the far half now (+1, unmirrored)"
+hold_id divider 900
+report "hold again (back to mirrored for the table)"
+
+echo
+echo "== three digits, for the point games (14.1, rotation) =="
+dump; set -- $(center_of "$(node home_score)")
+adbs shell "for i in \$(seq 1 100); do input tap $1 $2; done"
+sleep 1
+n=0
+while [ $n -lt 12 ]; do
+  dump
+  [ "$(text_of home_score)" = "100" ] && break
+  set -- $(center_of "$(node home_score)")
+  adbs shell input tap "$1" "$2"
+  sleep 0.3
+  n=$((n+1))
+done
+report "home_score tapped to 100"
+tap_id home_reset
+report "home_reset from 100"
 shoot 02-portrait
 
 echo
@@ -181,8 +212,8 @@ report "rotated back to portrait"
 shoot 07-portrait-again
 
 echo
-echo "== crash log (expect empty) =="
-adbs logcat -d -s AndroidRuntime:E 2>&1 | grep -v "^---" | tail -5
+echo "== crash log (expect empty: the app's own, not the emulator's) =="
+adbs logcat -d 2>&1 | grep -A3 "FATAL EXCEPTION" | grep -E "com\.kevin\.score" | tail -5
 restore_rotation
 echo "== screenshots =="
 ls -l "$OUT"/*.png

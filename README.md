@@ -8,26 +8,42 @@ is what makes a published hash worth anything:
 
 | Artifact | Size | Purpose |
 | --- | --- | --- |
-| `out/score.apk` | 75,149 bytes, `a9510cbd…28e618a` | debug-signed, for the dev loop (`sh build.sh`) |
-| `out/score-release.apk` | 79,239 bytes, `ae18bb5f…71c2f` | release-signed with the project's own 4096-bit key (`SIGN=release sh build.sh`) |
+| `out/score.apk` | 79,245 bytes, `44835f23…a62264f7` | debug-signed, for the dev loop (`sh build.sh`) |
+| `out/score-release.apk` | 87,431 bytes, `6cf0081f…c51868e01e` | release-signed with the project's own 4096-bit key (`SIGN=release sh build.sh`) |
 
 ## Behaviour
 
 - **HOME is white on green**, **AWAY is mustard on tomato**; each side is a coloured panel, the whole
   palette is half-saturated, and the `+` / `−` tiles are the one green and one red.
-- Each side shows its name, a two-digit score (`00`), a `−` button, a `+` button and a `Reset` button.
+- Each side shows its name, a score (`00`), a `−` button, a `+` button and a `Reset` button.
 - **Tapping the big score adds a point**, same as `+` (with the same haptic tick); the tile flashes
   while pressed.
 - **Swipe up or down anywhere on a side** to move that side one point: up adds, down subtracts. One
   point per flick, and a flick that starts on a button is taken from the button, so it cannot count
   twice.
-- Score range per side is `00`–`99`; `−` at zero and `+` at 99 do nothing.
+- **The far half is drawn rotated 180°** so the player sitting opposite reads it upright - name,
+  score, buttons and all - and its swipe direction is mirrored with it, so "up" means +1 in the frame
+  of whoever is reading that half. A lone scorekeeper flips it back with a long press on the centre
+  bar, and the choice sticks across launches.
+- Score range per side is `00`–`999`. Races of games only need two digits, but the point disciplines
+  their server supports (14.1, 15-ball rotation) are played to 75, 100 or 150, and a two-digit
+  scoreboard cannot express those at all. `−` at zero and `+` at 999 do nothing.
+- **A first-run hint** names the three gestures that are otherwise invisible: swipe to adjust, hold a
+  name to rename, hold the centre bar to flip the far side. It disappears for good once the operator
+  has scored something.
+- **Reset asks first in a linked match**, where it discards a tally that is on its way to the server.
+  Standalone, where nothing is at stake, it stays instant.
+- **A linked board leads with the table number** (`TABLE 4`): that is what the players are listening
+  for. A tournament that is not open for anonymous scoring still loads, from the public read, as a
+  view-only board with the reason on screen instead of an error over a blank one.
 - **Rename by dwell**: rest a finger on a team name for 0.9 s. The name dims while the dwell
   runs, then the rename dialog opens. Lifting the finger early cancels, so a name cannot be
   renamed by accident. Names are capped at 16 characters; a blank name reverts to `HOME` / `AWAY`.
 - Scores and names survive rotation (the activity handles the configuration change in place)
   and process death (saved instance state).
-- The screen stays awake while the app is open - a scoreboard that sleeps mid-match is useless.
+- The screen stays awake while the app is open, and the app holds **full brightness** for as long as
+  it is in front: a pool room is dim and the phone lies flat on a table. It is a window attribute, so
+  leaving the app restores the device's own setting.
 - Zero permissions in everyday use. Standalone scoring — the app opened normally — uses no network at
   all. **Linked match mode is the exception** (see below): it holds `INTERNET` so it can read the match
   you opened from a link and submit its result, and it talks to no other host. No ads, no analytics and
@@ -169,8 +185,10 @@ Two results worth spelling out, because they look like defects and are not:
 
 ```
 space check: uiautomator root [0,0][1080,2340] vs screencap 1080x2340
+first-run hint: Swipe a score up or down to adjust · hold a name to rename · hold the centre bar to flip the far side
 initial                          home=00 away=00 | names=HOME/AWAY
 tap home score (increments)      home=01 away=00
+hint after the first point: <missing>
 tap home score again             home=02 away=00
 home_plus                        home=03 away=00
 home_minus                       home=02 away=00
@@ -179,28 +197,46 @@ away_plus                        home=02 away=02
 away_reset                       home=02 away=00
 swipe up on home score (+1)      home=03 away=00
 swipe down on home score (-1)    home=02 away=00
-swipe up on away score (+1)      home=02 away=01
-swipe down on away score (-1)    home=02 away=00
+screen-down on the mirrored far half (+1 in that player's frame) home=02 away=01
+screen-up on the mirrored far half (-1 in that player's frame) home=02 away=00
 swipe up starting on the + tile (must be +1, no press) home=03 away=00
 swipe up on bare panel (+1)      home=04 away=00
 swipe down on bare panel (-1)    home=03 away=00
 home_minus x4 (floor at 0)       home=00 away=00
 home_plus x3                     home=03 away=00
-hold 300ms (below dwell)         home=03 away=00 | names=HOME/AWAY   <- no dialog
+portrait geometry: home_score [33,275][504,1801] away_score [576,543][1047,2069]
+mirror check: the far half's name [576,2069][1047,2175] should sit below its score [576,543][1047,2069]
+hold the centre bar (far half upright for the operator) home=03 away=00 | names=HOME/AWAY
+screen-up on the far half now (+1, unmirrored) home=03 away=01 | names=HOME/AWAY
+hold again (back to mirrored for the table) home=03 away=01 | names=HOME/AWAY
+home_score tapped to 100         home=100 away=01 | names=HOME/AWAY
+home_reset from 100              home=00 away=01 | names=HOME/AWAY
+hold 300ms (below dwell)         home=00 away=01 | names=HOME/AWAY   <- no dialog
 hold 1500ms (dwell reached)      dialog editbox=HOME
 typed HAWKS                      dialog editbox=HAWKS
-saved rename                     home=03 away=00 | names=HAWKS/AWAY
-rotated to landscape             home=03 away=00 | names=HAWKS/AWAY
-rotated back to portrait         home=03 away=00 | names=HAWKS/AWAY
+saved rename                     home=00 away=01 | names=HAWKS/AWAY
+rotated to landscape             home=00 away=01 | names=HAWKS/AWAY
+landscape geometry: home_score [169,205][1136,673] away_score [1208,473][2175,941]
+rotated back to portrait         home=00 away=01 | names=HAWKS/AWAY
 crash log                        empty
 ```
 
-Three of those rows exist because of bugs they caught, not because they were obvious:
+Five of those rows exist because of bugs they caught, not because they were obvious:
 
 - *swipe starting on the + tile* - fails if the flick is not taken from the button, by counting twice.
 - *swipe on bare panel* - failed on the first build of this feature (see the table above) because no
   child consumed the down, so `ViewGroup` never asked `onInterceptTouchEvent` again.
 - *hold 300 ms* - the negative case for the rename dwell, which must not open a dialog.
+- *screen-up/down on the mirrored far half* - the far half is drawn rotated for the player sitting
+  opposite, so a screen-up flick has to mean *down* in that half's own frame. Without the inversion
+  the player across the table would decrement when they meant to add. The two flip rows after it
+  prove the inversion follows the setting rather than being hard-coded.
+- *home_score tapped to 100* - the three-digit case, which no other row would catch. The AVD's input
+  queue drops a few taps under rapid input, so the row taps in a device-side loop and then tops up
+  until the widget actually reads `100`, instead of trusting a fixed count.
+
+The crash row is filtered to this package, after the first version of it counted an emulator's own
+`RemoteException` burst - logged around an `adb root` - as if the app had crashed.
 
 Pixel probe of the captures (`python tools/probe_screens.py verify/emu-*.png`). This is what proves
 the palette actually renders, since a widget dump only carries text and geometry:
@@ -208,22 +244,26 @@ the palette actually renders, since a widget dump only carries text and geometry
 ```
 verify/emu-02-portrait.png  1080x2340  (portrait)
   app content columns 0..1079 (midpoint 539); divider x 537..542 -> off by -2 px
-  HOME: panel px 101162  glyphs x[74..468] y[199..1167]
-  AWAY: panel px 101177  glyphs x[617..1017] y[201..1169]
-  step tiles: green  20290 px   red  20617 px
+  HOME: panel px 101162  glyphs x[74..536] y[199..2295]
+  AWAY: panel px 116351  glyphs x[663..1005] y[221..2143]
+  green  20216 px   red  20565 px      (any green/red tile anywhere: the step buttons, or in
+                                        linked mode the Submit button, which reuses the green one)
 verify/emu-06-landscape.png  2340x1080  (landscape)
   app content columns 136..2207 (midpoint 1171); divider x 1169..1174 -> off by -2 px
-  HOME: panel px  76634  glyphs x[468..842] y[130..560]
-  AWAY: panel px  76672  glyphs x[1507..1885] y[130..560]
-  step tiles: green  45586 px   red  45913 px
+  HOME: panel px  76634  glyphs x[382..924] y[130..994]
+  AWAY: panel px 115478  glyphs x[1551..1875] y[150..1014]
+  green  45388 px   red  45737 px      (same)
 ```
 
-Both halves paint their own panel colour (101,162 vs 101,177 px - they are the same size), the digits
-sit centred inside them, the two step tiles really are the green and the red they claim to be
-(20,290 vs 20,617 px), and the divider is on the content midpoint in both orientations (the -2 px is
-the 6 px seam straddling the centre line). The landscape figure shows why the probe measures against
-the *content* span rather than the framebuffer: the window is inset by a 136 px status bar on the
-left and a navigation bar on the right.
+Both halves paint their own panel colour, and the glyph ranges are the visible proof of the mirror: in
+portrait HOME's run from y 199 (its name) down to y 2295 (its Reset), while AWAY's run from y 221 (its
+Reset, at the top) to y 2143 (its name, at the bottom) - the same content in the opposite order. The
+two pixel counts differ for that reason, not because one half is smaller: each is scanned in the same
+band, and the halves put different controls in it. The step tiles are still the green and the red they
+claim to be, and the divider is on the content midpoint in both orientations (the -2 px is the 6 px
+seam straddling the centre line). The landscape figure shows why the probe measures against the
+*content* span rather than the framebuffer: the window is inset by a 136 px status bar on the left and
+a navigation bar on the right.
 
 Extra checks: `apksigner verify -v` -> v1, v2 and v3 all verify (so it installs on API 21 and up);
 `aapt2 dump badging` -> `com.kevin.score`, v1.0, minSdk 21, targetSdk 34, launchable activity, **0
@@ -272,20 +312,22 @@ taps, flicks and rotates the display, so it needs the phone unlocked and undistu
 
 ```
 +=====================+=====================+
-|        HOME         |        AWAY         |   name (dwell 0.9 s to rename)
-|  (white on green)   | (mustard on tomato) |
-|         12          |         07          |   two-digit score - tap it to add a point
-|     [-]      [+]    |     [-]      [+]    |   red - / green +, 76 dp tiles
-|        Reset        |        Reset        |   per-side reset
+|        HOME         |     [-]     [+]     |   the far half is drawn rotated 180°, so on screen
+|  (white on green)   |        Reset        |   its controls are nearest its own player
+|         12          |         07          |   score - tap it to add a point (three digits fit)
+|     [-]      [+]    |          AWAY       |   name (dwell 0.9 s to rename)
+|        Reset        | (mustard on tomato) |
 +=====================+=====================+
-   swipe up/down here    swipe up/down here    up = +1, down = -1, one point per flick
+   swipe up/down here    swipe up/down here    up = +1, down = -1, one point per flick, in the
+                                                 frame of whoever is reading that half
 ```
 
 ## Files
 
 ```
 app/AndroidManifest.xml                      package com.kevin.score, minSdk 21, targetSdk 34
-app/java/com/kevin/score/MainActivity.java   all behaviour (single activity, ~300 lines)
+app/java/com/kevin/score/MainActivity.java   all behaviour (single activity, ~1,290 lines)
+app/java/com/kevin/score/TournamentApi.java  the tournament server client (link, reads, submit, correct)
 app/java/com/kevin/score/SwipePanel.java     root layout that owns the swipe gesture
 app/res/layout/activity_main.xml             the single screen
 app/res/values/{strings,colors,styles}.xml

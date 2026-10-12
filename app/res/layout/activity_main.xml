@@ -104,13 +104,17 @@
                 android:textColor="@color/home_text" />
         </LinearLayout>
 
+        <!-- The centre bar: a long press flips the far half for the player sitting opposite. -->
         <View
+            android:id="@+id/divider"
             android:layout_width="2dp"
             android:layout_height="match_parent"
             android:background="@color/bg" />
 
-        <!-- AWAY: mustard on tomato. Swipe up/down anywhere on this half to move its score. -->
+        <!-- AWAY: mustard on tomato. Swipe up/down anywhere on this half to move its score.
+             Drawn rotated 180 degrees by default, so the player sitting opposite reads it upright. -->
         <LinearLayout
+            android:id="@+id/away_panel"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
@@ -199,6 +203,19 @@
         </LinearLayout>
     </com.kevin.score.SwipePanel>
 
+    <!-- First-run gesture hint: the swipes and holds are invisible until someone says so. -->
+    <TextView
+        android:id="@+id/hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/linked_bar"
+        android:gravity="center"
+        android:padding="8dp"
+        android:text="@string/hint_gestures"
+        android:textColor="@color/linked_text_dim"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
     <!-- Linked match mode: hidden unless the app was opened from a tournament scoring link. -->
     <LinearLayout
         android:id="@+id/linked_bar"
@@ -208,6 +225,18 @@
         android:background="@color/linked_bar"
         android:padding="12dp"
         android:visibility="gone">
+
+        <!-- The table number leads the bar: venues call matches by table. -->
+        <TextView
+            android:id="@+id/linked_table"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:letterSpacing="0.08"
+            android:textColor="@color/accent"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/linked_status"
@@ -237,7 +266,6 @@
             android:gravity="center"
             android:paddingTop="4dp"
             android:paddingBottom="4dp"
-            android:text="@string/linked_race_none"
             android:textColor="@color/accent"
             android:textSize="13sp" />
 

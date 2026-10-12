@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputFilter;
@@ -31,9 +32,13 @@ import java.util.UUID;
 /**
  * Single-screen score keeper.
  *
- * HOME occupies the left half, AWAY the right half. Each side owns a two-digit score,
+ * HOME occupies the left half, AWAY the right half. Each side owns a three-digit score,
  * a decrement button, an increment button and a reset button. Resting a finger on a
  * team name for {@link #DWELL_MS} milliseconds opens the rename dialog.
+ *
+ * <p>The far half is drawn rotated so the player sitting opposite reads it upright, and every
+ * discipline the server supports fits: races of games won, and the point games (14.1, 15-ball
+ * rotation) whose targets run past 99.
  */
 public class MainActivity extends Activity {
 
@@ -41,7 +46,8 @@ public class MainActivity extends Activity {
     private static final int AWAY = 1;
 
     private static final int MIN_SCORE = 0;
-    private static final int MAX_SCORE = 99;
+    /** Three digits: 14.1 is played to 100+ and 15-ball rotation's targets run to 150. */
+    private static final int MAX_SCORE = 999;
 
     private static final int MAX_NAME_LENGTH = 16;
 
@@ -56,6 +62,14 @@ public class MainActivity extends Activity {
     private static final int[] ID_SCORE = {R.id.home_score, R.id.away_score};
     private static final int[] ID_NAME = {R.id.home_name, R.id.away_name};
     private static final int[] ID_GOAL = {R.id.home_goal, R.id.away_goal};
+
+    private static final String PREFS = "score";
+    /** Set once the first-run gesture hint has been shown and dismissed. */
+    private static final String PREF_HINT = "hint_seen";
+    /** Whether the far half is drawn rotated for the player sitting opposite. */
+    private static final String PREF_MIRROR = "mirror_away";
+    /** Per-tournament memory of the match last scored, so an operator's table is the default. */
+    private static final String PREF_LAST_MATCH = "last_match_";
 
     private static final String STATE_SCORES = "scores";
     private static final String STATE_NAMES = "names";
@@ -97,13 +111,31 @@ public class MainActivity extends Activity {
     /** Set once a reached goal has been acknowledged, so the prompt does not nag on every point. */
     private final boolean[] goalPrompted = {false, false};
     private TextView linkedRace;
+    /** The "TABLE 4" header: venues call matches by table, so the number leads the bar. */
+    private TextView linkedTable;
+    /** True for a tournament that is not open for anonymous scoring: the board scores, nothing submits. */
+    private boolean viewOnly;
+
+    // ---- plain-scoreboard extras: a hint, a mirror, and remembered preferences
+
+    private SharedPreferences prefs;
+    /** First-run gesture hint, hidden for good once the operator has scored something. */
+    private TextView hint;
+    /** The far half, rotated 180 degrees so the player sitting opposite reads it upright. */
+    private View awayPanel;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         setContentView(R.layout.activity_main);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        // A pool room is dim and the phone lies flat on a table, so hold full brightness for as long
+        // as the app is in front. It is a window attribute, so leaving the app restores the device's.
+        WindowManager.LayoutParams attrs = getWindow().getAttributes();
+        attrs.screenBrightness = 1f;
+        getWindow().setAttributes(attrs);
 
+        prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         restore(state);
 
         for (int side = HOME; side <= AWAY; side++) {
@@ -127,6 +159,11 @@ public class MainActivity extends Activity {
             @Override
             public void onSwipe(boolean homeSide, int delta) {
                 int side = homeSide ? HOME : AWAY;
+                if (!homeSide && mirrored()) {
+                    // The far half is drawn rotated, so that player's "up" is the screen's down.
+                    // Flip it back: up always means +1 in the frame of whoever reads that half.
+                    delta = -delta;
+                }
                 scoreView[side].performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
                 step(side, delta);
             }
@@ -169,15 +206,84 @@ public class MainActivity extends Activity {
                 openGoalsDialog();
             }
         });
+        linkedTable = (TextView) findViewById(R.id.linked_table);
+
+        // The far half reads upright for the player sitting opposite. A lone scorekeeper flips it
+        // back with a long press on the centre bar, and the choice sticks across launches.
+        awayPanel = findViewById(R.id.away_panel);
+        applyMirror(prefs.getBoolean(PREF_MIRROR, true));
+        View divider = findViewById(R.id.divider);
+        divider.setContentDescription(getString(R.string.cd_flip));
+        divider.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                boolean flip = !mirrored();
+                applyMirror(flip);
+                prefs.edit().putBoolean(PREF_MIRROR, flip).apply();
+                Toast.makeText(MainActivity.this,
+                        flip ? R.string.mirror_on : R.string.mirror_off, Toast.LENGTH_SHORT).show();
+                return true;
+            }
+        });
+
+        hint = (TextView) findViewById(R.id.hint);
+        if (prefs.getBoolean(PREF_HINT, false)) {
+            hint.setVisibility(View.GONE);
+        } else {
+            hint.setVisibility(View.VISIBLE);
+            hint.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    dismissHint();
+                }
+            });
+        }
 
         handleLink(getIntent());
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Back on a linked board: re-read the match, so a director's correction or a change made on
+        // another phone shows up. The operator's own tallies are left exactly as they are.
+        if (loaded && match != null && tournament != null && !busy) {
+            inBackground(new Runnable() {
+                @Override
+                public void run() {
+                    refreshMatch();
+                }
+            });
+        }
+    }
+
+    /** Rotates the far half 180 degrees. Its swipe direction is mirrored with it. */
+    private void applyMirror(boolean mirrored) {
+        awayPanel.setRotation(mirrored ? 180f : 0f);
+    }
+
+    private boolean mirrored() {
+        return awayPanel != null && awayPanel.getRotation() == 180f;
+    }
+
+    /** The hint has done its job the moment the operator scores something. */
+    private void dismissHint() {
+        if (hint == null || hint.getVisibility() != View.VISIBLE) {
+            return;
+        }
+        hint.setVisibility(View.GONE);
+        prefs.edit().putBoolean(PREF_HINT, true).apply();
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        handleLink(intent);
+        // Only a real link re-opens the board: tapping the launcher icon on a live instance
+        // carries no data, and re-opening would silently throw away the tallies in progress.
+        if (intent != null && intent.getData() != null) {
+            handleLink(intent);
+        }
     }
 
     @Override
@@ -260,13 +366,14 @@ public class MainActivity extends Activity {
         });
     }
 
-    /** Moves one side by {@code delta}, clamped to the two digits the display can show. */
+    /** Moves one side by {@code delta}, clamped to the digits the display can show. */
     private void step(int side, int delta) {
         int next = clamp(score[side] + delta);
         if (next == score[side]) {
             return;
         }
         score[side] = next;
+        dismissHint();
         refresh(side);
         checkGoal(side);
     }
@@ -279,10 +386,36 @@ public class MainActivity extends Activity {
                 if (score[side] == MIN_SCORE) {
                     return;
                 }
-                score[side] = MIN_SCORE;
-                refresh(side);
+                if (linkedBar != null && linkedBar.getVisibility() == View.VISIBLE && loaded) {
+                    // In a linked match this discards a tally that is on its way to the server.
+                    confirmReset(side);
+                    return;
+                }
+                reset(side);
             }
         });
+    }
+
+    private void confirmReset(final int side) {
+        new AlertDialog.Builder(this)
+                .setTitle(getString(R.string.reset_title, name[side]))
+                .setMessage(getString(R.string.reset_message, name[side]))
+                .setPositiveButton(R.string.reset_confirm, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        reset(side);
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    /** Back to zero. Dropping below a goal re-arms that side's prompt, which is deliberate. */
+    private void reset(int side) {
+        score[side] = MIN_SCORE;
+        dismissHint();
+        refresh(side);
+        checkGoal(side);
     }
 
     private void refresh(int side) {
@@ -291,7 +424,10 @@ public class MainActivity extends Activity {
 
         if (goalView[side] != null) {
             if (goal[side] > 0) {
-                goalView[side].setText(getString(R.string.linked_goal_short, goal[side]));
+                boolean matchPoint = score[side] == goal[side] - 1;
+                goalView[side].setText(getString(matchPoint
+                        ? R.string.linked_goal_match_point
+                        : R.string.linked_goal_short, goalUnit(), goal[side]));
                 goalView[side].setVisibility(View.VISIBLE);
             } else {
                 goalView[side].setVisibility(View.GONE);
@@ -301,7 +437,7 @@ public class MainActivity extends Activity {
         String label = name[side];
         nameView[side].setContentDescription(getString(R.string.cd_name, label));
         scoreView[side].setContentDescription(goal[side] > 0
-                ? getString(R.string.cd_score_goal, label, format(score[side]), goal[side])
+                ? getString(R.string.cd_score_goal, label, format(score[side]), goalUnit(), goal[side])
                 : getString(R.string.cd_score, label, format(score[side])));
         plusButton[side].setContentDescription(getString(R.string.cd_plus, label));
         minusButton[side].setContentDescription(getString(R.string.cd_minus, label));
@@ -323,15 +459,18 @@ public class MainActivity extends Activity {
         });
     }
 
-    /** Keeps the two digits as large as the score box allows, in any orientation. */
+    /** Keeps the score as large as the box allows, in any orientation and at any digit count. */
     private void resizeScore(TextView view) {
         int width = view.getWidth() - view.getPaddingLeft() - view.getPaddingRight();
         int height = view.getHeight() - view.getPaddingTop() - view.getPaddingBottom();
         if (width <= 0 || height <= 0) {
             return;
         }
+        CharSequence shown = view.getText();
+        // At least two digits, so a fresh board keeps its 00 look; a point game grows to three.
+        int digits = Math.max(2, shown == null ? 0 : shown.length());
         float byHeight = height * 0.75f;
-        float byWidth = width / 1.20f * 0.95f; // "00" in monospace is about 1.2 em wide
+        float byWidth = width * 0.95f / (digits * 0.6f); // a monospace digit is about 0.6 em wide
         float size = Math.min(byHeight, byWidth);
         if (Math.abs(size - view.getTextSize()) < 1f) {
             return;
@@ -371,9 +510,12 @@ public class MainActivity extends Activity {
         submitted = false;
         submitKey = null;
         busy = false;
+        viewOnly = false;
+        linkedTable.setVisibility(View.GONE);
 
         linkedBar.setVisibility(View.VISIBLE);
         linkedNote.setVisibility(View.GONE);
+        updateRaceLine();
         setStatus(getString(R.string.linked_loading));
         setAction(getString(R.string.linked_submit), false);
 
@@ -399,10 +541,21 @@ public class MainActivity extends Activity {
                 @Override
                 public void run() {
                     tournament = found1;
+                    viewOnly = false;
                     chooseMatch(entrants, matches);
                 }
             });
         } catch (final TournamentApi.ApiError e) {
+            // A tournament that is not open for anonymous scoring rejects the scoring endpoints. The
+            // anonymous read still answers, so fall back to it: names, table and state, minus the
+            // ability to submit, with the reason on screen. Without this the app showed an error
+            // and a blank board.
+            try {
+                loadPublic();
+                return;
+            } catch (TournamentApi.ApiError noPublicRead) {
+                // Keep the scoring error: it is the more specific one.
+            }
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
@@ -412,6 +565,19 @@ public class MainActivity extends Activity {
                 }
             });
         }
+    }
+
+    /** The anonymous read of a tournament that is not open for scoring. */
+    private void loadPublic() throws TournamentApi.ApiError {
+        final TournamentApi.PublicBoard board = api.publicBoard(link.tournament);
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                tournament = board.tournament;
+                viewOnly = true;
+                chooseMatch(board.entrants, board.matches);
+            }
+        });
     }
 
     /**
@@ -438,6 +604,12 @@ public class MainActivity extends Activity {
         List<TournamentApi.Match> ready = withBothSides(candidates);
         if (!ready.isEmpty()) {
             candidates = ready;
+        }
+        // An operator works one table all night: the match last scored for this tournament leads the
+        // picker. It is re-validated by this very fetch, so a stale id simply misses.
+        String remembered = prefs.getString(PREF_LAST_MATCH + tournament.id, null);
+        if (remembered != null && candidates.size() > 1) {
+            candidates = withFirst(candidates, remembered);
         }
         if (candidates.size() == 1) {
             applyMatch(entrants, candidates.get(0));
@@ -480,9 +652,16 @@ public class MainActivity extends Activity {
         submitKey = null;
         refresh(HOME);
         refresh(AWAY);
+        prefs.edit().putString(PREF_LAST_MATCH + tournament.id, chosen.id).apply();
 
+        showTable(chosen);
         setStatus(tournament.name + " \u00b7 " + chosen.describe());
-        if (submitted) {
+        if (viewOnly) {
+            // Read-only: the board still tallies, but nothing here can be sent to the server.
+            linkedNote.setText(R.string.linked_view_only);
+            linkedNote.setVisibility(View.VISIBLE);
+            setAction(getString(R.string.linked_submit), false);
+        } else if (submitted) {
             String winner = winnerNameFor(chosen.winnerEntrantId);
             linkedNote.setText(winner == null
                     ? getString(R.string.linked_recorded_anonymous)
@@ -492,6 +671,94 @@ public class MainActivity extends Activity {
         } else {
             linkedNote.setVisibility(View.GONE);
             setAction(getString(R.string.linked_submit), homeEntrantId != null && awayEntrantId != null);
+        }
+    }
+
+    /** The table number, when the match has one: it is the thing the players are listening for. */
+    private void showTable(TournamentApi.Match m) {
+        String ref = emptyToNull(m.tableRef);
+        if (ref == null) {
+            linkedTable.setVisibility(View.GONE);
+            return;
+        }
+        // A bare number gets the word in front; anything already labelled ("Table 4") is left alone.
+        linkedTable.setText(ref.matches("\\d+") ? getString(R.string.linked_table_num, ref) : ref);
+        linkedTable.setVisibility(View.VISIBLE);
+    }
+
+    /** Point games are played to a points target; the rest to a race of games. */
+    private String goalUnit() {
+        String game = tournament == null ? "" : tournament.game;
+        return isPointGame(game) ? getString(R.string.unit_points) : getString(R.string.unit_race);
+    }
+
+    /**
+     * 14.1 and 15-ball rotation are scored in points, so their goals read "Points to 100"; the
+     * games-won disciplines read "Race to 7". These are the labels their own console uses.
+     */
+    private static boolean isPointGame(String game) {
+        return "straight_14_1".equals(game) || "15ball_rotation".equals(game);
+    }
+
+    private static List<TournamentApi.Match> withFirst(List<TournamentApi.Match> matches, String id) {
+        List<TournamentApi.Match> out = new java.util.ArrayList<TournamentApi.Match>();
+        for (TournamentApi.Match m : matches) {
+            if (m.id.equals(id)) {
+                out.add(m);
+            }
+        }
+        for (TournamentApi.Match m : matches) {
+            if (!m.id.equals(id)) {
+                out.add(m);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Re-reads the match the board is on and reflects a state change - a director's correction, or
+     * another phone submitting it - without touching the operator's tallies or their match choice.
+     */
+    private void refreshMatch() {
+        final String matchId = match.id;
+        final String tournamentId = tournament.id;
+        final String tournamentName = tournament.name;
+        try {
+            final TournamentApi.Match fresh = find(api.matches(tournamentId), matchId);
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (busy) {
+                        return;
+                    }
+                    if (fresh == null) {
+                        setStatus(tournamentName + " \u00b7 " + getString(R.string.linked_match_gone));
+                        return;
+                    }
+                    match = fresh;
+                    showTable(fresh);
+                    setStatus(tournamentName + " \u00b7 " + fresh.describe());
+                    if (viewOnly) {
+                        return;
+                    }
+                    if (fresh.isComplete() && !submitted) {
+                        submitted = true;
+                        String winner = winnerNameFor(fresh.winnerEntrantId);
+                        linkedNote.setText(winner == null
+                                ? getString(R.string.linked_recorded_anonymous)
+                                : getString(R.string.linked_recorded_name, winner));
+                        linkedNote.setVisibility(View.VISIBLE);
+                        setAction(getString(R.string.linked_correct), true);
+                    } else if (!fresh.isComplete() && submitted) {
+                        submitted = false;
+                        linkedNote.setVisibility(View.GONE);
+                        setAction(getString(R.string.linked_submit),
+                                homeEntrantId != null && awayEntrantId != null);
+                    }
+                }
+            });
+        } catch (TournamentApi.ApiError ignored) {
+            // Offline or asleep: the board keeps working, it just has no fresh state to show.
         }
     }
 
@@ -725,7 +992,7 @@ public class MainActivity extends Activity {
     }
 
     private void askToSubmitReachedGoal(final int side) {
-        if (!loaded || submitted || busy || match == null) {
+        if (!loaded || submitted || busy || match == null || viewOnly) {
             return;
         }
         String message = getString(R.string.linked_goal_reached, name[side], goal[side])
@@ -750,10 +1017,10 @@ public class MainActivity extends Activity {
             return;
         }
         if (goal[HOME] == 0 && goal[AWAY] == 0) {
-            linkedRace.setText(R.string.linked_race_none);
+            linkedRace.setText(getString(R.string.linked_race_none, goalUnit()));
             return;
         }
-        linkedRace.setText(getString(R.string.linked_race_fmt,
+        linkedRace.setText(getString(R.string.linked_race_fmt, goalUnit(),
                 goal[HOME] == 0 ? "\u2014" : String.valueOf(goal[HOME]),
                 goal[AWAY] == 0 ? "\u2014" : String.valueOf(goal[AWAY])));
     }
@@ -799,7 +1066,7 @@ public class MainActivity extends Activity {
         input.setHint(hint);
         input.setContentDescription(hint);   // labels it for TalkBack and for the UI harness
         input.setInputType(InputType.TYPE_CLASS_NUMBER);
-        input.setFilters(new InputFilter[] {new InputFilter.LengthFilter(2)});
+        input.setFilters(new InputFilter[] {new InputFilter.LengthFilter(3)});
         if (value > 0) {
             input.setText(String.valueOf(value));
             input.setSelectAllOnFocus(true);   // typing replaces the old goal

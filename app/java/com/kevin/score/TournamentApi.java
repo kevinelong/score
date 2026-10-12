@@ -208,6 +208,40 @@ final class TournamentApi {
 
     // ------------------------------------------------------------------ reading
 
+    /**
+     * One anonymous read of {@code /public/tournaments/{id}}.
+     *
+     * <p>It answers with the tournament, its entrants and its matches in a single response, which is
+     * how the app can still show a board for a tournament that is not open for anonymous scoring.
+     * It carries no scores: results live behind the session-gated history endpoint.
+     */
+    static final class PublicBoard {
+        final Tournament tournament;
+        final List<Entrant> entrants;
+        final List<Match> matches;
+
+        PublicBoard(Tournament tournament, List<Entrant> entrants, List<Match> matches) {
+            this.tournament = tournament;
+            this.entrants = entrants;
+            this.matches = matches;
+        }
+    }
+
+    PublicBoard publicBoard(String slugOrId) throws ApiError {
+        JSONObject body = request("GET", "/public/tournaments/" + encode(slugOrId), null, null);
+        JSONObject t = body.optJSONObject("tournament");
+        if (t == null) {
+            throw new ApiError(0, "bad_response", "No tournament in the response");
+        }
+        // This payload names its arrays entrants/matches rather than items, so the fields are parsed
+        // by the same helpers the scoring endpoints use.
+        return new PublicBoard(
+                new Tournament(t.optString("id"), t.optString("name"), t.optString("state"),
+                        t.optString("visibility"), t.optString("game")),
+                parseEntrants(body.optJSONArray("entrants")),
+                parseMatches(body.optJSONArray("matches")));
+    }
+
     Tournament[] tournament(String slugOrId) throws ApiError {
         JSONObject body = request("GET", "/tournaments/" + encode(slugOrId), null, null);
         JSONArray divisions = body.optJSONArray("divisions");
@@ -224,8 +258,16 @@ final class TournamentApi {
 
     List<Entrant> entrants(String tournamentId) throws ApiError {
         JSONObject body = request("GET", "/tournaments/" + encode(tournamentId) + "/entrants?archived=true", null, null);
+        return parseEntrants(body.optJSONArray("items"));
+    }
+
+    List<Match> matches(String tournamentId) throws ApiError {
+        JSONObject body = request("GET", "/tournaments/" + encode(tournamentId) + "/matches", null, null);
+        return parseMatches(body.optJSONArray("items"));
+    }
+
+    private static List<Entrant> parseEntrants(JSONArray items) {
         List<Entrant> out = new ArrayList<Entrant>();
-        JSONArray items = body.optJSONArray("items");
         for (int i = 0; items != null && i < items.length(); i++) {
             JSONObject item = items.optJSONObject(i);
             if (item == null) {
@@ -237,10 +279,8 @@ final class TournamentApi {
         return out;
     }
 
-    List<Match> matches(String tournamentId) throws ApiError {
-        JSONObject body = request("GET", "/tournaments/" + encode(tournamentId) + "/matches", null, null);
+    private static List<Match> parseMatches(JSONArray items) {
         List<Match> out = new ArrayList<Match>();
-        JSONArray items = body.optJSONArray("items");
         for (int i = 0; items != null && i < items.length(); i++) {
             JSONObject item = items.optJSONObject(i);
             if (item == null) {

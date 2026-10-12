@@ -106,6 +106,15 @@ One activity, three states:
   offering a "TBD" match while a real one waits would be wrong.
 - **submitted** — the winner is shown, the action becomes **Correct result** (reopen with a reason),
   and the tallies stay editable until submitted.
+- **read-only** — a tournament whose scoring is not open to anonymous callers still answers the
+  public read (`GET /api/v1/public/tournaments/{id}` — verified to return tournament, entrants and
+  matches together in one anonymous response, and *no* scores, since results live behind the
+  session-gated history endpoint). The board loads from that instead of showing an error over a blank
+  screen: entrants, table and match state, the tallies still work as a plain scoreboard, and the
+  submit action is disabled with the reason on screen.
+- **on resume** the app re-reads the match it is on, so a director's correction, or a result recorded
+  from another phone, appears at the table without the operator doing anything. The tallies and the
+  match choice are left alone; only the state, the table number and the action follow the server.
 
 **Winner selection: tap the side that won.** The server's contract wants a winner, and their own
 console scores by "tapping a winner"; the tallies ride along in `score`. A tie therefore cannot be
@@ -150,9 +159,16 @@ mistake. Carry on past the goal and it does not nag; drop back below and reach i
 again. The goals are set by tapping the race line in the linked bar, and blank means no goal, which is
 plain 15-ball behaviour.
 
-A side's goal is displayed **under its name** on the board ("race to 11"), because that is where you
-are looking while playing, and the line takes no space at all when no goal is set — the score box is
-full height in a plain match. The bar keeps the race line as the control that sets and changes it.
+A side's goal is displayed **under its name** on the board, because that is where you are looking
+while playing, and the line takes no space at all when no goal is set — the score box is full height
+in a plain match. The wording follows the tournament's own discipline, in their console's two labels:
+`straight_14_1` and `15ball_rotation` are scored in points, so those lines read "Points to 100" and
+the bar reads "Points to 100 – 75"; the games-won disciplines read "Race to 7". A side one point short
+of its goal says "· match point". The bar keeps the race line as the control that sets and changes it.
+
+Point games are why the app carries **three digits**. Their own defaults run 25/50/100/150 for rotation
+and to 100 or more for 14.1, and a two-digit score could not express them at all; the score font is
+sized for the digit count, so three digits fill the box without clipping it.
 
 **Why the goal is set in the app and not read from the server:** there is nowhere on the server to keep
 it. `tournaments.game` is validated on create against a fixed list — `15ball_rotation`, `8ball`,

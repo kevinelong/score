@@ -83,14 +83,18 @@ def main() -> None:
         mid = start if start is not None else w // 2
         for label, x0, x1, panel, text in (("HOME", 0, mid, HOME_BG, HOME_TEXT),
                                            ("AWAY", mid, w, AWAY_BG, AWAY_TEXT)):
+            # The whole half for the glyphs: with the far half mirrored its name sits at the
+            # bottom, and a band would miss exactly the half that needs checking.
             panel_px = len(scan(im, (x0, int(h * 0.55), x1, h), panel))
-            glyphs = scan(im, (x0, int(h * 0.08), x1, int(h * 0.52)), text)
+            glyphs = scan(im, (x0, int(h * 0.08), x1, h), text)
             print(f"  {label}: panel px {panel_px:6}  glyphs {bbox(glyphs)}")
 
-        band = (0, int(h * 0.6), w, h)
+        # The whole page: with the far half mirrored the step rows no longer sit in the
+        # same band, and this is only a sanity count either way.
+        band = (0, 0, w, h)
         print(f"  green {len(scan(im, band, PLUS_TILE)):6} px   "
               f"red {len(scan(im, band, MINUS_TILE)):6} px      "
-              f"(any green/red tile in the lower half: the step buttons, or in linked mode the "
+              f"(any green/red tile anywhere: the step buttons, or in linked mode the "
               f"Submit button, which reuses the green one)")
 
 
