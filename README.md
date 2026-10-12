@@ -435,6 +435,12 @@ For this app the honest recommendation is **direct APK + the Samsung Galaxy Stor
 no accounts and no data, the expensive parts of Play (AAB, targetSdk 36, the 12-tester gate) buy
 discoverability, not capability. Play becomes the right answer when you want strangers to find it.
 
+The direct-APK route is live: **https://github.com/kevinelong/score-android** is the public
+distribution repository (`kevinelong/score-android`, a separate repo from this source one) holding the
+release-signed APK, a `v1.0` GitHub Release, screenshots, and the install/use/privacy text a stranger
+needs. Publishing a new version means: bump the version, rebuild, copy the artifact over, commit there
+and cut a new release.
+
 ## Footprint
 
 | Path | Size | Notes |
