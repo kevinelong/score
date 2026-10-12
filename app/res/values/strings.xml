@@ -51,4 +51,6 @@
     <string name="linked_goal_hint">Submit the result, or keep editing if that was a mistake.</string>
     <string name="linked_goal_submit">Submit result</string>
     <string name="linked_goal_keep">Keep editing</string>
+    <string name="linked_goal_short">race to %1$d</string>
+    <string name="cd_score_goal">%1$s score %2$s, race to %3$d. Tap to add a point.</string>
 </resources>

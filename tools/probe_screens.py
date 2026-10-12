@@ -88,8 +88,10 @@ def main() -> None:
             print(f"  {label}: panel px {panel_px:6}  glyphs {bbox(glyphs)}")
 
         band = (0, int(h * 0.6), w, h)
-        print(f"  step tiles: green {len(scan(im, band, PLUS_TILE)):6} px   "
-              f"red {len(scan(im, band, MINUS_TILE)):6} px")
+        print(f"  green {len(scan(im, band, PLUS_TILE)):6} px   "
+              f"red {len(scan(im, band, MINUS_TILE)):6} px      "
+              f"(any green/red tile in the lower half: the step buttons, or in linked mode the "
+              f"Submit button, which reuses the green one)")
 
 
 if __name__ == "__main__":

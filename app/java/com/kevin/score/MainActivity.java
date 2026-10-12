@@ -55,6 +55,7 @@ public class MainActivity extends Activity {
     private static final int[] ID_RESET = {R.id.home_reset, R.id.away_reset};
     private static final int[] ID_SCORE = {R.id.home_score, R.id.away_score};
     private static final int[] ID_NAME = {R.id.home_name, R.id.away_name};
+    private static final int[] ID_GOAL = {R.id.home_goal, R.id.away_goal};
 
     private static final String STATE_SCORES = "scores";
     private static final String STATE_NAMES = "names";
@@ -65,6 +66,8 @@ public class MainActivity extends Activity {
     private final String[] name = {DEFAULT_NAME[HOME], DEFAULT_NAME[AWAY]};
     private final TextView[] scoreView = new TextView[2];
     private final TextView[] nameView = new TextView[2];
+    /** The "race to N" line under each name; hidden when that side has no goal. */
+    private final TextView[] goalView = new TextView[2];
     private final View[] plusButton = new View[2];
     private final View[] minusButton = new View[2];
     private final View[] resetButton = new View[2];
@@ -106,6 +109,7 @@ public class MainActivity extends Activity {
         for (int side = HOME; side <= AWAY; side++) {
             scoreView[side] = (TextView) findViewById(ID_SCORE[side]);
             nameView[side] = (TextView) findViewById(ID_NAME[side]);
+            goalView[side] = (TextView) findViewById(ID_GOAL[side]);
             plusButton[side] = findViewById(ID_PLUS[side]);
             minusButton[side] = findViewById(ID_MINUS[side]);
             resetButton[side] = findViewById(ID_RESET[side]);
@@ -285,9 +289,20 @@ public class MainActivity extends Activity {
         scoreView[side].setText(format(score[side]));
         nameView[side].setText(name[side]);
 
+        if (goalView[side] != null) {
+            if (goal[side] > 0) {
+                goalView[side].setText(getString(R.string.linked_goal_short, goal[side]));
+                goalView[side].setVisibility(View.VISIBLE);
+            } else {
+                goalView[side].setVisibility(View.GONE);
+            }
+        }
+
         String label = name[side];
         nameView[side].setContentDescription(getString(R.string.cd_name, label));
-        scoreView[side].setContentDescription(getString(R.string.cd_score, label, format(score[side])));
+        scoreView[side].setContentDescription(goal[side] > 0
+                ? getString(R.string.cd_score_goal, label, format(score[side]), goal[side])
+                : getString(R.string.cd_score, label, format(score[side])));
         plusButton[side].setContentDescription(getString(R.string.cd_plus, label));
         minusButton[side].setContentDescription(getString(R.string.cd_minus, label));
         resetButton[side].setContentDescription(getString(R.string.cd_reset, label));
@@ -416,6 +431,13 @@ public class MainActivity extends Activity {
                     ? getString(R.string.linked_no_matches)
                     : getString(R.string.linked_not_started));
             return;
+        }
+        // A bracket that has advanced leaves downstream matches with one side still empty ("TBD").
+        // Prefer a match whose two entrants are known, so the app never offers an unscoreable one
+        // while a real match is waiting.
+        List<TournamentApi.Match> ready = withBothSides(candidates);
+        if (!ready.isEmpty()) {
+            candidates = ready;
         }
         if (candidates.size() == 1) {
             applyMatch(entrants, candidates.get(0));
@@ -761,6 +783,8 @@ public class MainActivity extends Activity {
                         goalPrompted[HOME] = false;
                         goalPrompted[AWAY] = false;
                         updateRaceLine();
+                        refresh(HOME);
+                        refresh(AWAY);
                         checkGoal(HOME);
                         checkGoal(AWAY);
                     }
@@ -867,6 +891,16 @@ public class MainActivity extends Activity {
                     out.add(m);
                     break;
                 }
+            }
+        }
+        return out;
+    }
+
+    private static List<TournamentApi.Match> withBothSides(List<TournamentApi.Match> matches) {
+        List<TournamentApi.Match> out = new java.util.ArrayList<TournamentApi.Match>();
+        for (TournamentApi.Match m : matches) {
+            if (emptyToNull(m.entrantAId) != null && emptyToNull(m.entrantBId) != null) {
+                out.add(m);
             }
         }
         return out;

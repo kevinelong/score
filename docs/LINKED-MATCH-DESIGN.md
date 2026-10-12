@@ -99,7 +99,11 @@ One activity, three states:
 - **standalone** — exactly today's behaviour, no link, no network, no permission prompt beyond the
   install itself.
 - **linked** — the two entrants become HOME and AWAY; taps and swipes tally them as they do now; a
-  footer shows the match (`tableRef`/`matchLabel` when present) and a **Submit result** action.
+  footer shows the match (`tableRef`/`matchLabel` when present), the race line, and a **Submit result**
+  action. The link names the tournament but not the match, so the app prefers one actually being
+  played, then one waiting to start, then one already recorded — and, among equals, one whose **two
+  entrants are known**: a bracket that has advanced leaves downstream matches with an empty side, and
+  offering a "TBD" match while a real one waits would be wrong.
 - **submitted** — the winner is shown, the action becomes **Correct result** (reopen with a reason),
   and the tallies stay editable until submitted.
 
@@ -145,6 +149,10 @@ reaches theirs. It asks rather than assumes: **Submit result**, or **keep editin
 mistake. Carry on past the goal and it does not nag; drop back below and reach it again and it asks
 again. The goals are set by tapping the race line in the linked bar, and blank means no goal, which is
 plain 15-ball behaviour.
+
+A side's goal is displayed **under its name** on the board ("race to 11"), because that is where you
+are looking while playing, and the line takes no space at all when no goal is set — the score box is
+full height in a plain match. The bar keeps the race line as the control that sets and changes it.
 
 **Why the goal is set in the app and not read from the server:** there is nowhere on the server to keep
 it. `tournaments.game` is validated on create against a fixed list — `15ball_rotation`, `8ball`,

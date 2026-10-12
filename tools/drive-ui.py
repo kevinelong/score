@@ -51,7 +51,8 @@ def show(xml):
         text = d.get("text") or ""
         rid = (d.get("resource-id") or "").replace("com.kevin.score:id/", "")
         if text or rid:
-            rows.append(f"  {(d.get('class') or '').split('.')[-1]:12} {rid:16} {text!r}")
+            rows.append(f"  {(d.get('class') or '').split('.')[-1]:12} {rid:16} "
+                        f"{d.get('bounds', ''):24} {text!r}")
     print("\n".join(rows))
 
 

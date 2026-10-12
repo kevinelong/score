@@ -42,6 +42,18 @@
                 android:contentDescription="@string/cd_name" />
 
             <TextView
+                android:id="@+id/home_goal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:letterSpacing="0.06"
+                android:alpha="0.8"
+                android:textColor="@color/home_text"
+                android:textSize="14sp"
+                android:visibility="gone" />
+
+            <TextView
                 android:id="@+id/home_score"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
@@ -122,6 +134,18 @@
                 android:textSize="22sp"
                 android:textStyle="bold"
                 android:contentDescription="@string/cd_name" />
+
+            <TextView
+                android:id="@+id/away_goal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:letterSpacing="0.06"
+                android:alpha="0.8"
+                android:textColor="@color/away_text"
+                android:textSize="14sp"
+                android:visibility="gone" />
 
             <TextView
                 android:id="@+id/away_score"

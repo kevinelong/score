@@ -8,8 +8,8 @@ is what makes a published hash worth anything:
 
 | Artifact | Size | Purpose |
 | --- | --- | --- |
-| `out/score.apk` | 75,149 bytes, `2e60350b…3dc881` | debug-signed, for the dev loop (`sh build.sh`) |
-| `out/score-release.apk` | 79,239 bytes, `34c07de0…8cf0a5d` | release-signed with the project's own 4096-bit key (`SIGN=release sh build.sh`) |
+| `out/score.apk` | 75,149 bytes, `a9510cbd…28e618a` | debug-signed, for the dev loop (`sh build.sh`) |
+| `out/score-release.apk` | 79,239 bytes, `ae18bb5f…71c2f` | release-signed with the project's own 4096-bit key (`SIGN=release sh build.sh`) |
 
 ## Behaviour
 
