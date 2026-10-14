@@ -104,6 +104,11 @@ placeholder squares for exactly that reason, which is worth fixing there one day
 
 - Publish or discard the branch above.
 - `assetlinks.json` on `codeonline.io`, so a scoring link opens the installed app instead of a chooser.
+  **Drafted and committed** (`kevinelong/fc` @ `c62a078`, `.well-known/assetlinks.json`, package
+  `com.kevin.score` + the release cert's SHA-256 `3B:72:3D:B8:…:F1:29`, read off the shipped APK with
+  `apksigner verify --print-certs`). Not live: the site is this fc clone served by nginx, hidden paths
+  all 404 there, so the server block needs an exact-match exception before the file is reachable —
+  and the pull on the box is a separate deploy step.
 - The phone trace for 1.4 — the emulator has carried every verification so far; the phone build is a
   release behind.
 - The one-paragraph privacy policy.
