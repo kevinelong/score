@@ -52,8 +52,11 @@ Rotation; every other discipline fell through to a generic games/points counter.
 chosen by the tournament's game — 14.1 gets 14 balls × 8 racks with a RUNNING TOTAL and 75/100 goals,
 the games-won disciplines get a tally inside the same sheet chrome.
 
-`git checkout main` leaves the branch alone; `git branch -D per-discipline-sheets` discards it.
-Nothing was pushed, so nothing is live. The branch tip is `d94b44c` on top of `main` at `e3fa51f`.
+The decision from here is one command either way, in the clone:
+publish — `git push -u origin per-discipline-sheets` (then the sheet and the rules PDF must go to
+GitHub Pages together, per the note below); discard — `git branch -D per-discipline-sheets`. `git
+checkout main` leaves the branch alone. Nothing was pushed, so nothing is live. The branch tip is
+`d94b44c` on top of `main` at `e3fa51f`.
 
 That clone is the only copy of those three commits, so they are also saved as a bundle inside this
 repository: **`verify/per-discipline-sheets.bundle`** (`git bundle verify` lists `main` at `e3fa51f`
