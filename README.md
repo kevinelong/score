@@ -477,8 +477,11 @@ Decide these **before** the first public release, because they are effectively p
 - **Package name** - `com.kevin.score` today. Publishing fixes it; changing it later is a different
   app with no upgrade path, so choose the final name now (a domain you control, or the common
   `io.github.<you>.<app>` convention).
-- **versionCode / versionName** - every upload needs a higher versionCode (now `3` / `1.2`, raised when
-  linked match mode shipped and again for race goals).
+- **versionCode / versionName** - every upload needs a higher versionCode. As shipped, **1.4** is
+  `versionCode 5` / `versionName 1.4` - verified on the published APK itself:
+  `aapt2 dump badging score-release.apk` prints
+  `package: name='com.kevin.score' versionCode='5' versionName='1.4'`. (This paragraph used to say
+  `3` / `1.2`, which is what 1.2 shipped as; a further upload must be higher again.)
 - **Licence** - decided: **`FSL-1.1-MIT`**, described below and applied to both repositories. Still
   open: a one-paragraph privacy policy. The app collects nothing, has no third-party SDKs and no
   analytics; the only network use is linked match mode, which talks to the host of the link you opened
@@ -577,3 +580,6 @@ will need an `INTERNET` permission and a `VIEW` intent filter (plus `onNewIntent
 already set in the manifest) in `MainActivity`, a return-URL round trip, and then the submit path
 over the existing `score`/`name` state; team names are view state today, so that phase also has to
 decide whether they should persist in `SharedPreferences`.
+
+This phase has not been started. It is listed under **Still open** in
+[`CONTINUE-HERE.md`](CONTINUE-HERE.md) so that a restart does not lose it.

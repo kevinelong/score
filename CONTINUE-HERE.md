@@ -37,13 +37,15 @@ drives a single screen by hand.
 
 ## Waiting for review — a local branch in the clone (nothing pushed)
 
-Branch **`per-discipline-sheets`** in `score-ref/15ball-scoresheet`, two commits:
+Branch **`per-discipline-sheets`** in `score-ref/15ball-scoresheet`, three commits:
 
 1. **14.1 paper sheet + rules PDF** — `docs/_scoresheet_141_draw.py`,
    `docs/build_141_paper_sheet.py`, `docs/build_141_rules.py`, `docs/141-paper-sheet.pdf`,
    `docs/141-rules.pdf`.
 2. **One score sheet per discipline** — `sheets.js`, `sheets.test.js`, changes to `app.js`,
    `index.html`, `styles.css`, and `server/DECISIONS/021-per-game-sheets.md`.
+3. **Mark `*.pdf` binary** — a `.gitattributes` entry, so a text-classified PDF cannot gain CRLF on
+   checkout under `core.autocrlf` and break its xref offsets.
 
 Why it matters: clicking a bracket match used to open the paper-style sheet only for 15-Ball
 Rotation; every other discipline fell through to a generic games/points counter. Now the sheet is
@@ -51,7 +53,12 @@ chosen by the tournament's game — 14.1 gets 14 balls × 8 racks with a RUNNING
 the games-won disciplines get a tally inside the same sheet chrome.
 
 `git checkout main` leaves the branch alone; `git branch -D per-discipline-sheets` discards it.
-Nothing was pushed, so nothing is live.
+Nothing was pushed, so nothing is live. The branch tip is `d94b44c` on top of `main` at `e3fa51f`.
+
+That clone is the only copy of those three commits, so they are also saved as a bundle inside this
+repository: **`verify/per-discipline-sheets.bundle`** (`git bundle verify` lists `main` at `e3fa51f`
+and `per-discipline-sheets` at `d94b44c`). Recover with
+`git fetch <this-repo>/verify/per-discipline-sheets.bundle per-discipline-sheets`.
 
 **If the 14.1 work is published, the sheet and the rules PDF go together**: the sheet's QR points at
 `docs/141-rules.pdf`, which 404s until that file is on GitHub Pages.
@@ -100,3 +107,6 @@ placeholder squares for exactly that reason, which is worth fixing there one day
 - The phone trace for 1.4 — the emulator has carried every verification so far; the phone build is a
   release behind.
 - The one-paragraph privacy policy.
+- The **`Not implemented yet (next phase)`** follow-up in `README.md`: open local URLs that carry a
+  return URL, and add a `Submit match` button that POSTs the result to a receiver server URL. Kevin's
+  stated follow-up; no code stubs it, and it is not otherwise tracked in this file.
