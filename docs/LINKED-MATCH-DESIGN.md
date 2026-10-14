@@ -308,14 +308,28 @@ listed below as a decision rather than assumed.
 
 ### The race coming from the bracket (this change)
 
-Everything above was run against a server that predates `race_to`. The columns and the payload fields
-this change reads were **not** exercised against a live bracket here. What *was* checked is that the
-names are the ones the server actually ships: on branch `sheet-stack` (commit `2beaaa6`),
-`resolveRaceTo` in their `internal/api/games.go` returns the layer as **`"match"`, `"division"` or
-`"default"`**, and the `Match` struct documents `raceTo`/`raceFrom` the same way — so the app reads the
-match payload's `raceFrom` with those three words and falls back to comparing the two values when a
-server names nothing.
+**The wire is proven end to end (2026-10-14).** On a private copy of the fixture DB served by its own
+instance (never a shared port or DB) with `UPDATE divisions SET race_to=7`, the committed build on the AVD
+opened the link with nothing typed, read **`Race to 7 · from the bracket`**, said **`Race to 7 · match
+point`** one short, fired **"Casey has reached 7"** at the bracket's target, recorded the submit, and the
+server stored a payload matching the block above **field by field, 16 of 16, key order included** — with
+`raceOrigin` present, **`raceFrom` absent**, and `raceSource` naming the layer (`division`) rather than an
+origin. The fifth state rendered live on the way: the console-created match has no division, so its race
+resolved to the game default and the bar read `Race to 7 · the discipline's default, no target set`.
 
+That read-back earned its keep immediately: the first pass stored `"raceFrom": "bracket"` because the APK
+installed on the AVD predated the rename — the old key silently reading as a *layer* word in a field that
+means provenance, which no JVM assertion could have caught.
+
+Still device-only, and the only gaps left: the **local override** dialog's three buttons and the race line
+in its `LOCAL OVERRIDE` / `set by hand` / `no race from the bracket` states (the wire run had a bracket
+race to read, so it never needed the operator's path), and the long `LOCAL OVERRIDE …` line wrapping in
+portrait — plus `tools/verify-ui.sh`, whose standalone trace is partial here (`uiautomator dump failed` at
+the rename dwell).
+
+What names the app reads and writes was checked against the landed server rather than trusted: on branch
+`sheet-stack` (commit `2beaaa6`), `resolveRaceTo` in their `internal/api/games.go` returns the layer as
+**`"match"`, `"division"` or `"default"`**, and the `Match` struct documents `raceTo`/`raceFrom` the same way.
 Do not confuse it with the console's **saved sheet record** (`sheet-payload.js`), whose origin field now
 speaks a different vocabulary (`bracket` | `local` | `override` | `unknown`) **and a different name**:
 this app writes it as `raceOrigin` (renamed from `raceFrom` exactly so the collision cannot bite again;
@@ -347,9 +361,10 @@ What was exercised here:
   to 100, reset from 100), then the run stopped with `uiautomator dump failed` at the rename dwell —
   a harness/emulator dump failure rather than an app assertion, so the trace for this build is partial.
   It drives standalone scoring only and never touches the race path.
-- **Not** exercised: the race line's wording in each state, the override dialog's three buttons, the goal
-  line under a name, and a payload with provenance arriving in `match_results` from a real submit — all
-  of that renders on the platform and needs a server with the columns.
+- **Not** exercised: the override dialog's three buttons, the race line in its three operator-path states,
+  and the long line's portrait wrapping — the run above had a bracket race to read, so it never needed the
+  operator's path (see the paragraph at the top of this section, which also records what the wire test
+  proved).
 
 ### In the app, on the emulator
 
