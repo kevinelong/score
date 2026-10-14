@@ -92,12 +92,18 @@ What changed here:
   `resolveRaceTo` (`internal/api/games.go`) and the `Match` struct, not taken on trust. That is what the
   app *reads*. It accepts `"bracket"` as well (the console's word for the same idea), and infers the
   layer from the two values when a server names none, so an older server still resolves correctly.
-- The **saved sheet record's `raceFrom`** is a different field with a different vocabulary
-  (`bracket | local | override | unknown`, `sheet-payload.js`). That is what the app *writes*:
-  `raceFrom` in the payload uses the console's words, `raceSource` carries the finer layer the brief
-  asked for (`division` vs `match` vs `default`, which the console's three words cannot express), and
-  `sheetKind: "tally"` + `payloadVersion` + `app: "score-android"` match the record. Same-name fields on
-  two objects, so the docs say which is which.
+- The **saved sheet record's** origin field is a different field with a different vocabulary
+  (`bracket | local | override | unknown`, `sheet-payload.js`). That is what the app *writes*, and after
+  the collision below it is called **`raceOrigin`**, not `raceFrom`: `raceFrom` now means the server's
+  field and nothing else. `raceSource` carries the layer (`match | division | default`, or `none` when
+  the bracket names no race; absent when the server named no layer), and `sheetKind: "tally"` +
+  `payloadVersion: 2` + `app: "score-android"` match the record. Three fields, three meanings, each
+  documented in `ResultPayload` where it is written and in the design doc's payload section.
+- **`raceOrigin` is the rename Main asked for** after the two same-named fields bit him: the console's
+  reader accepts the old key, so sheets already saved still read, and the phone now writes only
+  `raceOrigin`. `raceSource` was narrowed at the same time — `bracket` and `local` are origin words and
+  were removed from it, which is the same conflation in miniature; a layer field that cannot name a
+  layer is now absent rather than wrong.
 - The per-match override is a **new** route: `PATCH /api/v1/tournaments/{id}/matches/{matchId}` body
   `{"raceTo": <int|null>}`, director+, audited, outside the open-scoring group (and
   `PATCH …/divisions/{divisionId}` for the division layer). The app calls neither — it sets no layer,
@@ -138,6 +144,8 @@ Three gaps the work left open, deliberately:
 | `PAYLOAD_VERSION` → 1 | 1 FAIL: `payloadVersion got 1, want 2` | yes |
 | `bracketSource` inference (second attempt, after adding the missing row) | 1 FAIL: `provenance got "division", want "match"` | yes |
 | the console's `bracket` word reaching the read side | 1 FAIL: `provenance got "division", want "bracket"` | yes |
+| the origin key back to `raceFrom` | 8 FAILs: `raceOrigin got null, want "bracket"`, `and never the old colliding key got true, want false`, the key order | yes |
+| an origin word leaking into the layer field | 7 FAILs: `raceSource got "bracket", want "division"`, `got "override", want "match"`, `got "local", want "none"` | yes |
 
 That last one is the point of doing them: the first attempt **passed**, because no row covered a server
 that names no layer. The row was added, the guard re-broken, and then it went red.

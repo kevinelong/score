@@ -169,7 +169,14 @@ final class Race {
         return home > 0 || away > 0;
     }
 
-    /** The provenance as it travels in the payload: a stable, lowercase machine name. */
+    /**
+     * The <b>layer</b> as it travels in the payload's {@code raceSource}: {@code "match"},
+     * {@code "division"}, {@code "default"}, or {@code "none"} when the bracket names no race at all.
+     * Empty when there is no layer to name - {@link #FROM_BRACKET} (the bracket supplied the race and
+     * the server did not say which layer) and {@link #FROM_LOCAL} (the operator's own value, which is
+     * an <em>origin</em>, not a layer, and travels in {@code raceOrigin}). A caller writes the field
+     * only when this is non-empty, so an unnameable layer is absent rather than mislabelled.
+     */
     static String name(int source) {
         switch (source) {
             case FROM_DIVISION:
@@ -178,12 +185,10 @@ final class Race {
                 return "match";
             case FROM_DEFAULT:
                 return "default";
-            case FROM_BRACKET:
-                return "bracket";
-            case FROM_LOCAL:
-                return "local";
-            default:
+            case FROM_NONE:
                 return "none";
+            default:
+                return "";
         }
     }
 

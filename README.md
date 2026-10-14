@@ -8,7 +8,7 @@ is what makes a published hash worth anything:
 
 | Artifact | Size | Purpose |
 | --- | --- | --- |
-| `out/score.apk` | 83,341 bytes, `6bd778b8…13e15579` | debug-signed, for the dev loop (`sh build.sh`); signed with the git-ignored `tools/debug.keystore`, so this hash is this machine's build of the current source |
+| `out/score.apk` | 83,341 bytes, `7b3798cc…80564301` | debug-signed, for the dev loop (`sh build.sh`); signed with the git-ignored `tools/debug.keystore`, so this hash is this machine's build of the current source |
 | `out/score-release.apk` | 87,431 bytes, `6cf0081f…c51868e01e` | release-signed with the project's own 4096-bit key (`SIGN=release sh build.sh`) |
 
 `sh tools/check-release.sh` re-reads both artifacts and fails if the sizes, hashes,
@@ -529,9 +529,11 @@ installed, that same link opens the tournament's web console in a browser. The s
   offers **Submit result** or **keep editing**; carrying on past the goal does not nag, and dropping back
   below and re-reaching it asks again.
 - **The result carries the race, and where it came from.** Alongside the tallies and the goals, the
-  payload records `raceTo`, `raceFrom` (the console's own word for the origin), `raceSource` (the finer
-  layer: `division`, `match`, `default`, `local`) and the bracket's own `bracketRaceTo` when the desk
-  deviated, plus `sheetKind: "tally"` so a 14.1 tally is never read as a full rack sheet. See
+  payload records `raceTo`, `raceOrigin` (the console's saved-sheet word for the origin: `bracket`,
+  `local`, `override`, `unknown`), `raceSource` (the layer the bracket's race came from: `division`,
+  `match`, `default` or `none`, and the two `raceFrom`/`raceOrigin` fields are named apart on purpose),
+  and the bracket's own `bracketRaceTo` when the desk deviated, plus `sheetKind: "tally"` and
+  `payloadVersion: 2` so a 14.1 tally is never read as a full rack sheet. See
   [docs/LINKED-MATCH-DESIGN.md](docs/LINKED-MATCH-DESIGN.md) for the shape field by field.
 - **Retry is idempotent**: the same `Idempotency-Key` is reused, so a submit that actually landed is
   never recorded twice, and a failure keeps the tallies.

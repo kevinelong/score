@@ -95,13 +95,16 @@ alongside it. A result from a tournament whose division carries a race of 7, sco
   "app": "score-android", "appVersion": "1.4",
   "payloadVersion": 2, "sheetKind": "tally",
   "homeGoal": 7, "awayGoal": 7, "raceTo": 7,
-  "raceFrom": "bracket", "raceSource": "division", "bracketRaceTo": 7
+  "raceOrigin": "bracket", "raceSource": "division", "bracketRaceTo": 7
 }
 ```
 
 A consumer that reads only `.score` still sees the familiar string. Verified: the server stored this
 payload byte-for-byte (before the race fields were added — see "Verified" below for what has been run
 since).
+
+This payload writes **`payloadVersion: 2`** — the saved-sheet record's revision, bumped by the rename
+below, which is the version its reader has to know about.
 
 The race block, field by field:
 
@@ -110,25 +113,38 @@ The race block, field by field:
 | `homeGoal` / `awayGoal` | the goal each side was playing to, so an uneven handicap is visible. Sent only when a goal is in force (`0` would mean none) |
 | `raceTo` | the single number their fixtures and their console's reader use: the harder of the two goals. Absent when nothing was played to |
 | `bracketRaceTo` | the bracket's own race when the operator deviated from it, so a handicap cannot be mistaken for what the tournament asked for. Absent when the bracket names no race |
-| `raceFrom` | the **console's** word for where the race came from, which is what its reader believes: `bracket` \| `local` \| `override` \| `unknown` |
-| `raceSource` | this app's finer one: `match` \| `division` \| `default` \| `bracket` \| `local` \| `none` |
+| `raceOrigin` | where the **value in force** came from, in the console's saved-sheet vocabulary: `bracket` \| `local` \| `override` \| `unknown` |
+| `raceSource` | which **layer** of the bracket supplied the race: `match` \| `division` \| `default`, or `none` when the bracket names no race at all. Absent when a race exists but the server did not name its layer |
 
-Two provenance fields on purpose. `raceFrom` is the convention in the console's own sheet record
-(`sheet-payload.js`, `raceFrom = bracket \| local \| override \| unknown`): `override` is a typed goal
-that disagrees with the bracket's race, `local` is one typed where the bracket named no race at all, and
-`bracket` is the normal path. `raceSource` is finer, because the brief for this change asks which
-*layer* the bracket's number came from — a division's target, a per-match override for a longer final,
-or the game's own default — and the console's three words cannot express that. A reader that knows only
-one of the two still learns the truth.
+### Two vocabularies, and two fields, because they collide
 
-`sheetKind` is the other half of that record's convention, and the one marker a phone result must not
+Three things in this system are called a race and two of them had the same field name, which is worth
+stating once here rather than rediscovering it:
+
+| Where | Field | Words | Who writes it |
+| --- | --- | --- | --- |
+| the **match payload** (their API) | `raceFrom` | `match` \| `division` \| `default` | the server, in `resolveRaceTo` (`server/internal/api/games.go`); the app only **reads** it |
+| the **saved sheet record** (the payload in `match_results.payload_json`) | `raceOrigin` | `bracket` \| `local` \| `override` \| `unknown` | the console (`sheet-payload.js`) and this app |
+| …and its sibling | `raceSource` | `match` \| `division` \| `default` \| `none` | this app, for the layer the brief asks about — the console's three origin words cannot express it |
+
+`raceFrom` therefore means **the server's field, and nothing else**: the phone writes `raceOrigin`, so a
+sheet saved by the phone and one saved by the console read the same way, and a reader that treats
+`raceFrom` as an origin is never looking at a phone payload's key. `raceOrigin` is a rename of what this
+app used to write as `raceFrom`; the console's reader accepts the old key, so sheets already saved still
+read.
+
+`raceSource` is a *layer* field and never carries an origin: with an operator's override in force, the
+origin is `override` and `raceSource` still names the layer the **bracket's** race came from (paired with
+`bracketRaceTo`, its number), because the operator's own value is not a layer. That pair is how a saved
+sheet says both "the bracket asked for 9, set on this match" and "the desk played to 5–4".
+
+`sheetKind` is the other half of the record's convention, and the one marker a phone result must not
 omit: a sheet is produced by a **rack grid** (marked ball by ball — 15-Ball Rotation, Straight Pool
 14.1) or by a **tally** (stepped games against the race target), and the console believes the
 instrument a payload names, treating a missing one as a rack grid for a rack discipline. This app only
 ever produces a tally, so it says `"tally"` — for 14.1 too, where the number is only the points a side
-has run and never a full rack sheet. `payloadVersion` is that record's revision of this payload,
-bumped when a reader has to change to keep reading it (2 since the race and its provenance arrived);
-`appVersion` is the app build that wrote it, read from the package rather than hardcoded.
+has run and never a full rack sheet. `appVersion` is the app build that wrote the result, read from the
+package rather than hardcoded.
 
 ## How it behaves in the app
 
@@ -300,11 +316,13 @@ names are the ones the server actually ships: on branch `sheet-stack` (commit `2
 match payload's `raceFrom` with those three words and falls back to comparing the two values when a
 server names nothing.
 
-Do not confuse it with the console's **saved sheet record** (`sheet-payload.js`), whose `raceFrom`
-speaks a different vocabulary (`bracket` | `local` | `override` | `unknown`). Two fields, same name,
-different objects: this app *reads* the server's one and *writes* the record's one, so a sheet saved by
-the phone and one saved by the console read the same way. `"bracket"` is accepted on the read side too,
-because it means what this app means by it.
+Do not confuse it with the console's **saved sheet record** (`sheet-payload.js`), whose origin field now
+speaks a different vocabulary (`bracket` | `local` | `override` | `unknown`) **and a different name**:
+this app writes it as `raceOrigin` (renamed from `raceFrom` exactly so the collision cannot bite again;
+the console's reader accepts the old key, so sheets already saved still read). This app *reads* the
+server's `raceFrom` with the three layer words and *writes* `raceOrigin` with the four origin words, so a
+sheet saved by the phone and one saved by the console read the same way. `"bracket"` is accepted on the
+read side too, because it means what this app means by it.
 
 The per-match override is set through `PATCH /api/v1/tournaments/{id}/matches/{matchId}`
 (`{"raceTo": <int|null>}`, director+, audited, outside the open-scoring group) — a **new** route. The app

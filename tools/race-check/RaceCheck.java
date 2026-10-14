@@ -59,21 +59,24 @@ public final class RaceCheck {
         same("a target with no bracket race", Race.deviates(0, 5, 0), true);
         same("nothing typed, nothing on the bracket", Race.deviates(0, 0, 0), false);
 
-        section("the provenance names the payload carries");
+        section("the layer words the payload carries (raceSource) - layers only, never an origin");
         same("division", Race.name(Race.FROM_DIVISION), "division");
         same("match", Race.name(Race.FROM_MATCH), "match");
         same("default (nobody set one)", Race.name(Race.FROM_DEFAULT), "default");
-        same("bracket (a layer we cannot name)", Race.name(Race.FROM_BRACKET), "bracket");
-        same("local", Race.name(Race.FROM_LOCAL), "local");
-        same("none", Race.name(Race.FROM_NONE), "none");
+        same("none (the bracket names no race)", Race.name(Race.FROM_NONE), "none");
+        same("a bracket race with no layer named is absent, not mislabelled",
+                Race.name(Race.FROM_BRACKET), "");
+        same("the operator's own value is an origin, not a layer", Race.name(Race.FROM_LOCAL), "");
 
-        section("the console's own word for the origin (sheet-payload.js: raceFrom)");
+        section("the origin words the sheet record carries (raceOrigin)");
         same("the bracket's race", ResultPayload.origin(Race.plan("division", 7, 7, false, 0, 0)), "bracket");
         same("the bracket's race, match layer", ResultPayload.origin(Race.plan("match", 9, 7, false, 0, 0)), "bracket");
         same("the discipline's default", ResultPayload.origin(Race.plan("default", 25, 25, false, 0, 0)), "bracket");
         same("a typed goal that disagrees", ResultPayload.origin(Race.plan("division", 7, 7, true, 5, 4)), "override");
         same("a typed goal where the bracket named none", ResultPayload.origin(Race.plan("", 0, 0, true, 5, 4)), "local");
         same("no race anywhere", ResultPayload.origin(Race.plan("", 0, 0, false, 0, 0)), "unknown");
+        same("the record's words are never layer words",
+                ResultPayload.ORIGIN_OVERRIDE.equals(Race.name(Race.FROM_MATCH)), false);
 
         section("the label the discipline implies");
         same("straight_14_1 is scored in points", Race.isPointGame("straight_14_1"), true);
@@ -100,26 +103,27 @@ public final class RaceCheck {
         same("homeGoal", bracket.get("homeGoal"), 7);
         same("awayGoal", bracket.get("awayGoal"), 7);
         same("raceTo", bracket.get("raceTo"), 7);
-        same("raceFrom (the console's word)", bracket.get("raceFrom"), "bracket");
-        same("raceSource (the finer one)", bracket.get("raceSource"), "division");
+        same("raceOrigin (the record's word)", bracket.get("raceOrigin"), "bracket");
+        same("raceSource (the layer)", bracket.get("raceSource"), "division");
+        same("and never the old colliding key", bracket.containsKey("raceFrom"), false);
         same("bracketRaceTo", bracket.get("bracketRaceTo"), 7);
         same("key order", keys(bracket),
                 "score,home,away,homeName,awayName,discipline,app,appVersion,payloadVersion,sheetKind,"
-                        + "homeGoal,awayGoal,raceTo,raceFrom,raceSource,bracketRaceTo");
+                        + "homeGoal,awayGoal,raceTo,raceOrigin,raceSource,bracketRaceTo");
         same("no rack sheet field", bracket.containsKey("racks"), false);
 
         section("the payload, a per-match override");
         Map<String, Object> matchLevel = payload(7, 0, "9ball", Race.plan("match", 9, 7, false, 0, 0));
         same("raceTo", matchLevel.get("raceTo"), 9);
-        same("raceFrom", matchLevel.get("raceFrom"), "bracket");
+        same("raceOrigin", matchLevel.get("raceOrigin"), "bracket");
         same("raceSource", matchLevel.get("raceSource"), "match");
         same("bracketRaceTo", matchLevel.get("bracketRaceTo"), 9);
 
         section("the payload, a hand-set race with no bracket race to disagree with");
         Map<String, Object> handSet = payload(5, 4, "9ball", Race.plan("", 0, 0, true, 5, 4));
         same("raceTo", handSet.get("raceTo"), 5);
-        same("raceFrom", handSet.get("raceFrom"), "local");
-        same("raceSource", handSet.get("raceSource"), "local");
+        same("raceOrigin", handSet.get("raceOrigin"), "local");
+        same("no raceSource: the bracket named no race at all", handSet.get("raceSource"), "none");
         same("no bracketRaceTo", handSet.containsKey("bracketRaceTo"), false);
 
         section("the payload, a local override off a match override");
@@ -127,16 +131,24 @@ public final class RaceCheck {
         same("homeGoal", local.get("homeGoal"), 5);
         same("awayGoal", local.get("awayGoal"), 4);
         same("raceTo (the value in force)", local.get("raceTo"), 5);
-        same("raceFrom", local.get("raceFrom"), "override");
-        same("raceSource", local.get("raceSource"), "local");
+        same("raceOrigin", local.get("raceOrigin"), "override");
+        same("raceSource describes the bracket's race, not the override", local.get("raceSource"), "match");
         same("bracketRaceTo (what it deviated from)", local.get("bracketRaceTo"), 9);
+
+        section("the payload, a race whose layer the server did not name");
+        Map<String, Object> unlayered = payload(7, 0, "9ball", Race.plan("", 7, 0, false, 0, 0));
+        same("the race is still recorded", unlayered.get("raceTo"), 7);
+        same("raceOrigin", unlayered.get("raceOrigin"), "bracket");
+        same("no raceSource rather than a guessed word",
+                unlayered.containsKey("raceSource"), false);
+        same("bracketRaceTo", unlayered.get("bracketRaceTo"), 7);
 
         section("the payload, nothing from the bracket");
         Map<String, Object> none = payload(0, 0, "9ball", Race.plan("", 0, 0, false, 0, 0));
         same("no homeGoal", none.containsKey("homeGoal"), false);
         same("no awayGoal", none.containsKey("awayGoal"), false);
         same("no raceTo", none.containsKey("raceTo"), false);
-        same("raceFrom", none.get("raceFrom"), "unknown");
+        same("raceOrigin", none.get("raceOrigin"), "unknown");
         same("raceSource", none.get("raceSource"), "none");
         same("no bracketRaceTo", none.containsKey("bracketRaceTo"), false);
         same("the score is still there", none.get("score"), "0-0");
