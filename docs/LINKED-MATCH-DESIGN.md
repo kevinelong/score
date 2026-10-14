@@ -6,11 +6,18 @@ scoring link the tournament director already shares as a QR code — and the app
 the live tournament server, scores it, and submits the result. If the app is not installed, the same
 link opens the tournament's web console in the browser instead.
 
-The server is **kevinelong/15ball-scoresheet** (Go + SQLite, nginx in front). Nothing in this design
-requires a change to it.
+The server is **kevinelong/15ball-scoresheet** (Go + SQLite, nginx in front). Linked-match mode itself
+required no change to it. The **race** is the one exception, and it is a change their side made: a
+division's target and a per-match override are columns now (`divisions.race_to`, `matches.race_to`,
+migration 0018), resolved into every match payload as `raceTo`/`raceFrom`. The app reads that instead of
+asking the operator to type a race, which is what this document describes as of the version that landed
+it.
 
 Status: **implemented in the app and verified end to end** against a running server — open a link,
-score the match, submit, correct. See "Verified" below for what was exercised.
+score the match, submit, correct — for the version *before* the race came from the bracket. The race
+change is asserted on a plain JVM (`sh tools/check-race.sh`) and its APK is built and signature-verified;
+reading a real bracket race on a device needs a server that has the new columns. See "Verified" below
+for the split.
 
 ## A scoring link in action
 
@@ -50,7 +57,7 @@ Everything here was executed against the real server during design work — see 
 | --- | --- | --- |
 | 1 | `GET /api/v1/tournaments/{slugOrId}` | resolves the link; returns `{tournament, divisions}`. **Capture `tournament.id`** — everything after this uses the canonical id, because the link may carry a slug |
 | 2 | `GET /api/v1/tournaments/{id}/entrants?archived=true` | `{items:[{id, displayName, state, ...}]}` — the two team names |
-| 3 | `GET /api/v1/tournaments/{id}/matches` | `{items:[...]}` — only meaningful once the tournament is `in_progress`/`completed`; each match has `id, slot, state, entrantAId, entrantBId, winnerEntrantId, bracket, matchLabel, tableRef, version` |
+| 3 | `GET /api/v1/tournaments/{id}/matches` | `{items:[...]}` — only meaningful once the tournament is `in_progress`/`completed`; each match has `id, slot, state, entrantAId, entrantBId, winnerEntrantId, bracket, matchLabel, tableRef, version`, plus **`raceTo`** (the race resolved `matches.race_to → divisions.race_to → the game's default`, always a number) and **`raceFrom`** (`"match"` \| `"division"` \| `"default"`, the layer that supplied it) |
 | 4 | `POST /api/v1/tournaments/{id}/matches/{mid}/assign` | body `{}`; needed only from `scheduled`. `409 invalid_transition` is tolerated (someone else started it) |
 | 5 | `POST /api/v1/tournaments/{id}/matches/{mid}/start` | no body; from `assigned`/`reopened`. `409` tolerated for the same reason |
 | 6 | `POST /api/v1/tournaments/{id}/matches/{mid}/result` | body `{winnerEntrantId, loserEntrantId, score}` — the one call that matters |
@@ -77,20 +84,51 @@ Headers and rules:
 `score` is `json.RawMessage` on the server — stored verbatim in `match_results.payload_json`, and only
 read back by the session-gated match-history endpoint. Their own fixtures use `{"score":"75-40"}` and
 corrections add `"corrected":true`, so the app follows that convention and adds its own detail
-alongside it:
+alongside it. A result from a tournament whose division carries a race of 7, scored 4–7:
 
 ```json
 {
-  "score": "11-7",
-  "home": 11, "away": 7,
-  "homeName": "Player 1", "awayName": "Player 2",
-  "discipline": "15ball_rotation",
-  "app": "score-android", "appVersion": 2
+  "score": "4-7",
+  "home": 4, "away": 7,
+  "homeName": "Ada", "awayName": "Bo",
+  "discipline": "9ball",
+  "app": "score-android", "appVersion": "1.4",
+  "payloadVersion": 2, "sheetKind": "tally",
+  "homeGoal": 7, "awayGoal": 7, "raceTo": 7,
+  "raceFrom": "bracket", "raceSource": "division", "bracketRaceTo": 7
 }
 ```
 
 A consumer that reads only `.score` still sees the familiar string. Verified: the server stored this
-payload byte-for-byte.
+payload byte-for-byte (before the race fields were added — see "Verified" below for what has been run
+since).
+
+The race block, field by field:
+
+| Field | Meaning |
+| --- | --- |
+| `homeGoal` / `awayGoal` | the goal each side was playing to, so an uneven handicap is visible. Sent only when a goal is in force (`0` would mean none) |
+| `raceTo` | the single number their fixtures and their console's reader use: the harder of the two goals. Absent when nothing was played to |
+| `bracketRaceTo` | the bracket's own race when the operator deviated from it, so a handicap cannot be mistaken for what the tournament asked for. Absent when the bracket names no race |
+| `raceFrom` | the **console's** word for where the race came from, which is what its reader believes: `bracket` \| `local` \| `override` \| `unknown` |
+| `raceSource` | this app's finer one: `match` \| `division` \| `default` \| `bracket` \| `local` \| `none` |
+
+Two provenance fields on purpose. `raceFrom` is the convention in the console's own sheet record
+(`sheet-payload.js`, `raceFrom = bracket \| local \| override \| unknown`): `override` is a typed goal
+that disagrees with the bracket's race, `local` is one typed where the bracket named no race at all, and
+`bracket` is the normal path. `raceSource` is finer, because the brief for this change asks which
+*layer* the bracket's number came from — a division's target, a per-match override for a longer final,
+or the game's own default — and the console's three words cannot express that. A reader that knows only
+one of the two still learns the truth.
+
+`sheetKind` is the other half of that record's convention, and the one marker a phone result must not
+omit: a sheet is produced by a **rack grid** (marked ball by ball — 15-Ball Rotation, Straight Pool
+14.1) or by a **tally** (stepped games against the race target), and the console believes the
+instrument a payload names, treating a missing one as a rack grid for a rack discipline. This app only
+ever produces a tally, so it says `"tally"` — for 14.1 too, where the number is only the points a side
+has run and never a full rack sheet. `payloadVersion` is that record's revision of this payload,
+bumped when a reader has to change to keep reading it (2 since the race and its provenance arrived);
+`appVersion` is the app build that wrote it, read from the package rather than hardcoded.
 
 ## How it behaves in the app
 
@@ -127,6 +165,11 @@ and explain themselves ("this match is already final").
 
 ### Races, driven through the app
 
+**Historical trace, from app 1.4** — the build before the race came from the bracket, when every goal was
+typed and the race line had no provenance. It is kept because it is what was actually recorded, and
+because it is the behaviour the fallback still gives when the bracket names no race. The payload below
+is the old shape (no `raceFrom`/`raceSource`, `sheetKind` or `payloadVersion`).
+
 Against `t_race_001` — a 9-ball tournament (`game: "9ball"`), in-progress match Avery vs Blake:
 
 | Step | Evidence |
@@ -152,46 +195,48 @@ lie.
 
 ## Races to a goal
 
-A tournament can be a simple race: first to eleven games, say. Each side carries **its own goal**, so
-uneven goals are a handicap — 11 against 9 — and the app treats the match as over when either side
-reaches theirs. It asks rather than assumes: **Submit result**, or **keep editing** if the tally was a
-mistake. Carry on past the goal and it does not nag; drop back below and reach it again and it asks
-again. The goals are set by tapping the race line in the linked bar, and blank means no goal, which is
-plain 15-ball behaviour.
+A tournament can be a simple race: first to eleven games, say. **The race now comes from the bracket.**
+The server keeps it in three layers — `matches.race_to`, then `divisions.race_to`, then the game's own
+default — and resolves them into the match payload's `raceTo`, naming the layer in `raceFrom`. The app
+reads that when it opens a match and uses it as the goal for **both sides**, so an ordinary match needs
+no typing at all. The line in the linked bar says where the race came from, and the label follows the
+tournament's discipline: `straight_14_1` and `15ball_rotation` are scored in balls, so theirs read
+"Points to 100", and the games-won disciplines read "Race to 7". A side one point short of its goal says
+"· match point".
 
-A side's goal is displayed **under its name** on the board, because that is where you are looking
-while playing, and the line takes no space at all when no goal is set — the score box is full height
-in a plain match. The wording follows the tournament's own discipline, in their console's two labels:
-`straight_14_1` and `15ball_rotation` are scored in points, so those lines read "Points to 100" and
-the bar reads "Points to 100 – 75"; the games-won disciplines read "Race to 7". A side one point short
-of its goal says "· match point". The bar keeps the race line as the control that sets and changes it.
+| On the board | The bar reads |
+| --- | --- |
+| the division's target, or the game's default | `Race to 7 · from the bracket` / `Race to 25 · the discipline's default, no target set` |
+| a per-match override (a longer final, set by a director) | `Race to 9 · the bracket's match override` |
+| the operator typed a different target or a handicap | `LOCAL OVERRIDE · Race to 5 – 4 · the bracket's race is 7 · tap to change` |
+| the operator typed a target and the bracket has none | `Race to 5 – 4 · set by hand — the bracket has no race · tap to change` |
+| no race from the bracket (an older server, an offline read, no race set) | `Race to — · no race from the bracket — tap to set goals by hand` |
+
+**The operator's goals survive as an explicit override, not as the normal path.** Tapping the race line
+opens a dialog that names the bracket's race and says what typing here means; each side still carries
+its own goal, so an uneven handicap is still possible, and an operator's line is marked as theirs under
+the name as well as in the bar (`Race to 5 · local override`). Typing the bracket's own number back in
+is *not* an override — it drops back to the bracket's race — and the dialog's neutral button
+(`Bracket's race`) is the way back, so an override cannot be left on by accident. A goal typed for the
+last match never carries into the next one: opening a match resolves from the bracket first.
+
+Reaching a goal ends the match but the app asks rather than assumes: **Submit result**, or **keep
+editing** if the tally was a mistake. Carry on past the goal and it does not nag; drop back below and
+reach it again and it asks again. With no race anywhere — an older server, or a tournament nobody set a
+target for — the app behaves exactly as it did before: blank means no goal, set by hand.
 
 Point games are why the app carries **three digits**. Their own defaults run 25/50/100/150 for rotation
 and to 100 or more for 14.1, and a two-digit score could not express them at all; the score font is
 sized for the digit count, so three digits fill the box without clipping it.
 
-**Why the goal is set in the app and not read from the server:** there is nowhere on the server to keep
-it. `tournaments.game` is validated on create against a fixed list — `15ball_rotation`, `8ball`,
-`9ball`, `10ball`, `straight_14_1`, `bank_pool`, `one_pocket` — and is immutable afterwards, so a
-discipline string cannot carry "race to 11"; there is no race, best-of or target column on
-`tournaments`, `divisions` or `matches`; and the API reads the result `score` as `json.RawMessage` and
-stores it verbatim. Their own *offline* app has race concepts (`defaultRaceTo`, `raceLabel` in
-`app.js`) but never sends them — the cloud edition has none. So the app fills the gap from the client
-side, and the goal travels with the result, which is the only place it can persist:
+**Where the race resolution lives:** `Race.java`, pure (no Android, no `org.json`), so
+`sh tools/check-race.sh` asserts the resolution order on a plain JVM — that a match override beats the
+division, that the bracket's race beats a local goal that was never claimed as an override, that a
+claimed override wins, and what the payload records. The payload's shape is next door in
+`ResultPayload.java`, pure for the same reason; the app copies its rows into a `JSONObject` in order.
 
-```json
-{"score":"3-0","home":3,"away":0,"homeName":"Avery","awayName":"Blake","discipline":"9ball",
- "app":"score-android","appVersion":1,"homeGoal":3,"awayGoal":2,"raceTo":3}
-```
-
-Note `discipline` is whatever the director created the tournament with — the app reports the
-tournament's `game` verbatim instead of assuming 15-ball rotation, and a 9-ball tournament is creatable
-through their API today (`game: "9ball"`), even though their docs still describe v1 as 15-ball only.
-A consumer that reads only `.score` sees the familiar string.
-
-If races should ever be *first-class* — shown in their web console and OBS overlay, or enforced
-server-side — that needs a column on `divisions` or `matches`. That is a change to their server, so it
-is listed as an option rather than done.
+The bracket itself still shows **win/loss only**: a bracket card never carries a score, and the race is
+carried in the result payload, not drawn on the card.
 
 ## Opening the link in the app, or the browser
 
@@ -225,7 +270,9 @@ listed below as a decision rather than assumed.
 - Director/session features (creating tournaments and entrants stays in their web console).
 - Reading result history or the stored payload back (session-gated anyway).
 - SSE live updates, and the OBS overlay.
-- Any change to the server repo.
+- Any change to the server repo, with the one exception already made on their side: the race columns
+  (`divisions.race_to`, `matches.race_to`, migration 0018) and the `raceTo`/`raceFrom` the match payload
+  resolves from them. The app reads those; it sets neither.
 
 ## Verified so far
 
@@ -242,6 +289,27 @@ listed below as a decision rather than assumed.
   in a header value makes Go reject the whole request as `400 Bad Request` (the fix is to strip it),
   and `reopen` returns `400 reason_required` rather than a CSRF-style failure when the reason is
   missing.
+
+### The race coming from the bracket (this change)
+
+Everything above was run against a server that predates `race_to`. The columns and the payload fields
+this change reads were **not** exercised against a live bracket here; a device run needs a server that
+has them. What was exercised:
+
+- **`sh tools/check-race.sh`** — 135 assertions, all passing, on a plain JVM: the resolution order (a
+  match override over the division; the bracket's race over a local goal that was never claimed as an
+  override; a claimed override over both; an unnamed layer inferred from the two values; nothing
+  anywhere), the two provenance vocabularies, the discipline's label, and the payload's exact shape,
+  key order and marker. Each guard was broken deliberately, shown red, and restored — the rounds are
+  listed in `CONTINUE-HERE.md`.
+- **`sh build.sh`** — `out/score.apk` builds (81 KiB), `apksigner verify -v` reports v1, v2 and v3 all
+  verifying, badging reads `com.kevin.score` versionCode 5 / versionName 1.4 / minSdk 21 / targetSdk 34 /
+  one permission, and the new strings and classes are in the artifact (`aapt2 dump resources`,
+  `dexdump`).
+- **Not** exercised: the race line's wording, the override dialog's three buttons, the goal line under a
+  name, the payload arriving in `match_results` from a real submit — all of that renders on the
+  platform and needs the emulator against a server with the columns. `tools/verify-ui.sh` covers
+  standalone scoring only, so it would not exercise any of it either.
 
 ### In the app, on the emulator
 

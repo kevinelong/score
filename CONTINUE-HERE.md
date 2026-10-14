@@ -58,6 +58,69 @@ Two things it established the first time it ran:
 `README.md` and `CONTINUE-HERE.md` are not read by the checker except for the artifact table, so keep
 that table exact when anything is rebuilt or re-shipped.
 
+## The race comes from the bracket — 2026-10-14 (not shipped, not device-run)
+
+Kevin's ask: **"bracket should pass the race into the scorer app."** The phone no longer has to be told
+its target by hand. The server (their side, in the clone) gained the race — `divisions.race_to` and an
+optional `matches.race_to` for a longer final — and resolves it into `raceTo` for every match, naming the
+layer in `raceFrom` (`match` | `division` | `default`). The app reads that when it opens a match and
+plays both sides to it.
+
+What changed here:
+
+- **`Race.java`** (new, pure): the resolution order and its provenance, plus the discipline's label
+  split. **`ResultPayload.java`** (new, pure): the stored payload's shape, including the two provenance
+  vocabularies and the `sheetKind: "tally"` marker. Pure = no Android, no `org.json`, which is what lets
+  a plain JVM check them.
+- **`TournamentApi.java`**: the match read now carries `divisionId`, `raceTo` and `raceFrom`, the
+  tournament read returns its divisions with their own `raceTo`, and the public read is unchanged.
+- **`MainActivity.java`**: the goals are *derived* (`Race.plan`) from the bracket's race plus the
+  operator's own override, instead of being typed state. The race line says which of the five states is
+  in force (division target / match override / discipline default / local override / no race from the
+  bracket), and the override dialog names the bracket's race and has a `Bracket's race` button to drop
+  the override. A goal typed for the previous match cannot leak into the next one.
+- **The payload** now sends `raceTo`, `homeGoal`/`awayGoal`, `raceFrom` (the console's word, from its
+  `sheet-payload.js` record), `raceSource` (the finer layer), `bracketRaceTo`, `sheetKind: "tally"` and
+  `payloadVersion: 2`; `app` stays `score-android` and `appVersion` became the app build read from the
+  package. The endpoint, the `Idempotency-Key` and the read-only fallback are untouched, and no bracket
+  card gained a score.
+- **`tools/check-race.sh` + `tools/race-check/RaceCheck.java`** (new): 135 assertions on a plain JVM.
+
+Three gaps the work left open, deliberately:
+
+1. **No device run.** Reading a real bracket race needs a server with the new columns; the clone has
+   them in its working tree but nothing here has been driven against it. What only a device (or the
+   emulator) can confirm: the race line's wording in each of the five states, the override dialog's
+   three buttons, the goal line under a name, the long `LOCAL OVERRIDE …` line wrapping in portrait,
+   and the payload arriving in `match_results` from a real submit. `tools/verify-ui.sh` covers
+   standalone scoring only, so it does not touch any of that — it was not run for this change.
+2. **Not shipped.** The version is still 1.4 / versionCode 5 and only the debug APK was rebuilt
+   (`out/score.apk` 87,437 bytes, `50e1e290…562aa52c`); `out/score-release.apk` is left as the shipped
+   1.4 bytes so `tools/check-release.sh` still agrees with `score-dist`. Shipping this needs the bump
+   (1.5 / 6), both APKs rebuilt, the README table and `score-dist` updated together, and a release cut.
+3. **`appVersion` is now a string** (`"1.4"`, the app build) rather than the int the payload used to
+   carry, because that is the shape the console's record reads; the payload's own revision moved to
+   `payloadVersion`. Any consumer reading the old int should read `payloadVersion` instead.
+
+**Falsification rounds** (each guard broken, shown red, restored) — run against the final code with
+`sh tools/check-race.sh`:
+
+| Guard broken | Red output | Restored |
+| --- | --- | --- |
+| `bracketRace` preferring the division | 8 FAILs: `homeGoal got 7, want 9` … | yes |
+| the non-override branch using local values | 4 FAILs: `homeGoal got 5, want 7` … | yes |
+| `plan` ignoring `overrideSet` | 16 FAILs: `homeGoal got 7, want 5`, `raceSource got "division", want "local"` | yes |
+| `name(FROM_MATCH)` → `"division"` | 1 FAIL: `got "division", want "match"` | yes |
+| `SHEET_TALLY` → `"rack"` | 3 FAILs: `sheetKind got "rack", want "tally"` | yes |
+| `source()` naming an unraced payload's layer | 1 FAIL: `provenance got "match", want "none"` | yes |
+| `plan` applying no override when the bracket has no race | 7 FAILs | yes |
+| `deviates()` treating the bracket's own number as a deviation | 2 FAILs | yes |
+| `PAYLOAD_VERSION` → 1 | 1 FAIL: `payloadVersion got 1, want 2` | yes |
+| `bracketSource` inference (second attempt, after adding the missing row) | 1 FAIL: `provenance got "division", want "match"` | yes |
+
+That last one is the point of doing them: the first attempt **passed**, because no row covered a server
+that names no layer. The row was added, the guard re-broken, and then it went red.
+
 ## Waiting for review — a local branch in the clone (nothing pushed)
 
 Branch **`per-discipline-sheets`** in `score-ref/15ball-scoresheet`, three commits:
@@ -85,6 +148,13 @@ That clone is the only copy of those three commits, so they are also saved as a 
 repository: **`verify/per-discipline-sheets.bundle`** (`git bundle verify` lists `main` at `e3fa51f`
 and `per-discipline-sheets` at `d94b44c`). Recover with
 `git fetch <this-repo>/verify/per-discipline-sheets.bundle per-discipline-sheets`.
+
+As of this note the clone's working tree also holds **uncommitted race + sheet-payload work**:
+`server/internal/api/divisions.go` and `matches.go` (the `race_to` columns, `raceTo`/`raceFrom`),
+a new `server/internal/api/games.go` and `race_to_test.go`, new `sheet-payload.js` +
+`sheet-payload.test.js` (the stored-sheet record this app's payload follows), `server/DECISIONS/023-`
+and edits across `app.js`/`live.js`/`index.html`/`styles.css` and the implementation docs. None of it is
+committed or pushed there, so `git checkout .` in that clone would lose it.
 
 **If the 14.1 work is published, the sheet and the rules PDF go together**: the sheet's QR points at
 `docs/141-rules.pdf`, which 404s until that file is on GitHub Pages.
@@ -116,6 +186,7 @@ SIGN=release sh build.sh             # release APK -> out/score-release.apk
 sh tools/check-release.sh            # the APKs vs every documented size, hash, version, permission
 sh tools/check-release.sh --rebuild  # and prove the digests repeat
 sh tools/check-release.sh --online   # and compare the published release asset
+sh tools/check-race.sh               # the race resolution + the payload, on a plain JVM (no device)
 sh tools/verify-ui.sh emulator-5554 emu-      # the standalone regression trace
 
 # the distribution repository (and what a stranger downloads)
@@ -134,6 +205,10 @@ placeholder squares for exactly that reason, which is worth fixing there one day
 
 ## Still open, unchanged
 
+- Ship the race change: bump to 1.5 / versionCode 6, rebuild both APKs, update the README table and
+  `score-dist` together, cut the release. See the section above for what is deliberately not shipped.
+- Run the race on a device (or the emulator) against a server that has `race_to` — the only way to see
+  the race line, the override dialog and a stored payload with its provenance.
 - Publish or discard the branch above.
 - `assetlinks.json` on `codeonline.io`, so a scoring link opens the installed app instead of a chooser.
   **Drafted and committed** (`kevinelong/fc` @ `c62a078`, `.well-known/assetlinks.json`, package

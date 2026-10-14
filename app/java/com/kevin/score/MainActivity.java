@@ -6,6 +6,7 @@ import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputFilter;
@@ -74,7 +75,10 @@ public class MainActivity extends Activity {
     private static final String STATE_SCORES = "scores";
     private static final String STATE_NAMES = "names";
     private static final String STATE_LINK = "link";
-    private static final String STATE_GOALS = "goals";
+    private static final String STATE_RACE = "race";
+    private static final String STATE_RACE_FROM = "race_from";
+    private static final String STATE_RACE_OVERRIDE = "race_override";
+    private static final String STATE_RACE_OVERRIDE_SET = "race_override_set";
 
     private final int[] score = new int[2];
     private final String[] name = {DEFAULT_NAME[HOME], DEFAULT_NAME[AWAY]};
@@ -106,10 +110,30 @@ public class MainActivity extends Activity {
     /** Reused across retries, so a submit that actually landed is never recorded twice. */
     private String submitKey;
     private boolean busy;
-    /** Per-side race goals: 0 means no goal, and uneven goals are a handicap. */
+    /**
+     * The race in force, and where it came from. 0 means "no goal", and uneven goals are a handicap:
+     * the bracket's race is the default for both sides, and the operator's typed goals are an
+     * explicit deviation from it (see {@link Race}).
+     */
     private final int[] goal = {0, 0};
     /** Set once a reached goal has been acknowledged, so the prompt does not nag on every point. */
     private final boolean[] goalPrompted = {false, false};
+    /**
+     * The bracket's race for the match on the board, as the two payloads report it: the match's
+     * resolved {@code raceTo} and the layer that supplied it ({@code raceFrom}), plus the division's
+     * own. 0 in either value means that payload carried none.
+     */
+    private int matchRaceTo;
+    private String matchRaceFrom = "";
+    private int divisionRaceTo;
+    /** The tournament's divisions, so a match's division can lend it its own race. */
+    private List<TournamentApi.Division> divisions = new java.util.ArrayList<TournamentApi.Division>();
+    /** True once the operator has claimed a deviation from the bracket's race. */
+    private boolean raceOverridden;
+    /** The typed deviation, per side: 0 means that side has no goal. */
+    private final int[] goalOverride = {0, 0};
+    /** The resolution: the goals in force, the bracket's race, and each one's provenance. */
+    private Race.Plan race = Race.plan("", 0, 0, false, 0, 0);
     private TextView linkedRace;
     /** The "TABLE 4" header: venues call matches by table, so the number leads the bar. */
     private TextView linkedTable;
@@ -303,7 +327,13 @@ public class MainActivity extends Activity {
         if (linkUri != null) {
             out.putString(STATE_LINK, linkUri.toString());
         }
-        out.putIntArray(STATE_GOALS, new int[] {goal[HOME], goal[AWAY]});
+        // The bracket's race and the operator's deviation are inputs, not the resolved goals: the
+        // goals are derived (Race.plan checks the resolution order), so restoring the inputs is what
+        // keeps a rotation or a process death from inventing a race of its own.
+        out.putIntArray(STATE_RACE, new int[] {matchRaceTo, divisionRaceTo});
+        out.putString(STATE_RACE_FROM, matchRaceFrom);
+        out.putIntArray(STATE_RACE_OVERRIDE, new int[] {goalOverride[HOME], goalOverride[AWAY]});
+        out.putBoolean(STATE_RACE_OVERRIDE_SET, raceOverridden);
     }
 
     // ---------------------------------------------------------------- state
@@ -326,11 +356,23 @@ public class MainActivity extends Activity {
         if (savedLink != null) {
             linkUri = Uri.parse(savedLink);
         }
-        int[] savedGoals = state.getIntArray(STATE_GOALS);
-        if (savedGoals != null && savedGoals.length == 2) {
-            goal[HOME] = clamp(savedGoals[HOME]);
-            goal[AWAY] = clamp(savedGoals[AWAY]);
+        int[] savedRace = state.getIntArray(STATE_RACE);
+        if (savedRace != null && savedRace.length == 2) {
+            matchRaceTo = Math.max(0, savedRace[HOME]);
+            divisionRaceTo = Math.max(0, savedRace[AWAY]);
         }
+        String savedFrom = state.getString(STATE_RACE_FROM);
+        if (savedFrom != null) {
+            matchRaceFrom = savedFrom;
+        }
+        int[] savedOverride = state.getIntArray(STATE_RACE_OVERRIDE);
+        if (savedOverride != null && savedOverride.length == 2) {
+            goalOverride[HOME] = clamp(savedOverride[HOME]);
+            goalOverride[AWAY] = clamp(savedOverride[AWAY]);
+        }
+        raceOverridden = state.getBoolean(STATE_RACE_OVERRIDE_SET, false);
+        // The views do not exist yet, so only the resolution runs here; the binding loop paints it.
+        recomputeRace();
     }
 
     /** Clamps a score into the two-digit range the display can show. */
@@ -425,9 +467,15 @@ public class MainActivity extends Activity {
         if (goalView[side] != null) {
             if (goal[side] > 0) {
                 boolean matchPoint = score[side] == goal[side] - 1;
-                goalView[side].setText(getString(matchPoint
-                        ? R.string.linked_goal_match_point
-                        : R.string.linked_goal_short, goalUnit(), goal[side]));
+                // A goal the operator typed says so on the line under the name too, so the board
+                // never looks like it is playing to the bracket's race when it is not.
+                boolean local = race.source == Race.FROM_LOCAL;
+                int text = matchPoint
+                        ? (local ? R.string.linked_goal_match_point_local
+                                 : R.string.linked_goal_match_point)
+                        : (local ? R.string.linked_goal_short_local
+                                 : R.string.linked_goal_short);
+                goalView[side].setText(getString(text, goalUnit(), goal[side]));
                 goalView[side].setVisibility(View.VISIBLE);
             } else {
                 goalView[side].setVisibility(View.GONE);
@@ -511,6 +559,12 @@ public class MainActivity extends Activity {
         submitKey = null;
         busy = false;
         viewOnly = false;
+        matchRaceTo = 0;
+        matchRaceFrom = "";
+        divisionRaceTo = 0;
+        divisions = new java.util.ArrayList<TournamentApi.Division>();
+        resetOverride();
+        recomputeRace();
         linkedTable.setVisibility(View.GONE);
 
         linkedBar.setVisibility(View.VISIBLE);
@@ -527,14 +581,14 @@ public class MainActivity extends Activity {
         });
     }
 
-    /** Reads the tournament, its entrants and its matches, then decides which match to score. */
+    /** Reads the tournament, its divisions, entrants and matches, then decides which match to score. */
     private void load() {
         try {
-            TournamentApi.Tournament[] found = api.tournament(link.tournament);
-            if (found.length == 0) {
+            final TournamentApi.TournamentRead found = api.readTournament(link.tournament);
+            if (found.tournament == null) {
                 throw new TournamentApi.ApiError(0, "bad_response", "No tournament in the response");
             }
-            final TournamentApi.Tournament found1 = found[0];
+            final TournamentApi.Tournament found1 = found.tournament;
             final List<TournamentApi.Entrant> entrants = api.entrants(found1.id);
             final List<TournamentApi.Match> matches = api.matches(found1.id);
             runOnUiThread(new Runnable() {
@@ -542,6 +596,9 @@ public class MainActivity extends Activity {
                 public void run() {
                     tournament = found1;
                     viewOnly = false;
+                    // The divisions carry their own race targets, which is how a division's target is
+                    // told from a per-match override.
+                    divisions = found.divisions;
                     chooseMatch(entrants, matches);
                 }
             });
@@ -643,8 +700,15 @@ public class MainActivity extends Activity {
         score[HOME] = MIN_SCORE;
         score[AWAY] = MIN_SCORE;
         loaded = true;
-        goal[HOME] = 0;
-        goal[AWAY] = 0;
+        // The race comes from the bracket: the match payload's resolved value and the layer that
+        // supplied it, plus its division's own so the layers can be told apart even when the payload
+        // does not name one. A goal typed for the last match is not in force here - the bracket's
+        // race is the default for every ordinary match.
+        matchRaceTo = chosen.raceTo;
+        matchRaceFrom = chosen.raceFrom;
+        divisionRaceTo = divisionRaceOf(chosen);
+        resetOverride();
+        recomputeRace();
         goalPrompted[HOME] = false;
         goalPrompted[AWAY] = false;
         updateRaceLine();
@@ -689,15 +753,7 @@ public class MainActivity extends Activity {
     /** Point games are played to a points target; the rest to a race of games. */
     private String goalUnit() {
         String game = tournament == null ? "" : tournament.game;
-        return isPointGame(game) ? getString(R.string.unit_points) : getString(R.string.unit_race);
-    }
-
-    /**
-     * 14.1 and 15-ball rotation are scored in points, so their goals read "Points to 100"; the
-     * games-won disciplines read "Race to 7". These are the labels their own console uses.
-     */
-    private static boolean isPointGame(String game) {
-        return "straight_14_1".equals(game) || "15ball_rotation".equals(game);
+        return Race.isPointGame(game) ? getString(R.string.unit_points) : getString(R.string.unit_race);
     }
 
     private static List<TournamentApi.Match> withFirst(List<TournamentApi.Match> matches, String id) {
@@ -738,6 +794,14 @@ public class MainActivity extends Activity {
                     match = fresh;
                     showTable(fresh);
                     setStatus(tournamentName + " \u00b7 " + fresh.describe());
+                    if (fresh.raceTo != matchRaceTo || !fresh.raceFrom.equals(matchRaceFrom)) {
+                        // A director changed the race, or set a longer target for this final: follow
+                        // it, and keep whatever the operator typed on top of it.
+                        matchRaceTo = fresh.raceTo;
+                        matchRaceFrom = fresh.raceFrom;
+                        divisionRaceTo = divisionRaceOf(fresh);
+                        applyRace();
+                    }
                     if (viewOnly) {
                         return;
                     }
@@ -961,8 +1025,12 @@ public class MainActivity extends Activity {
         busy = false;
         score[HOME] = MIN_SCORE;
         score[AWAY] = MIN_SCORE;
-        goal[HOME] = 0;
-        goal[AWAY] = 0;
+        matchRaceTo = 0;
+        matchRaceFrom = "";
+        divisionRaceTo = 0;
+        divisions = new java.util.ArrayList<TournamentApi.Division>();
+        resetOverride();
+        recomputeRace();
         goalPrompted[HOME] = false;
         goalPrompted[AWAY] = false;
         updateRaceLine();
@@ -973,6 +1041,48 @@ public class MainActivity extends Activity {
     }
 
     // ------------------------------------------------------------- race goals
+
+    /**
+     * Resolves what the board plays to, from the inputs only: the two bracket values the server
+     * reports, and the operator's own goal when they have claimed one. No views, so it also runs
+     * while the state is being restored. The order is the whole point, and it lives in {@link Race}
+     * where tools/check-race.sh can assert it.
+     */
+    private void recomputeRace() {
+        race = Race.plan(matchRaceFrom, matchRaceTo, divisionRaceTo, raceOverridden,
+                goalOverride[HOME], goalOverride[AWAY]);
+        goal[HOME] = race.homeGoal;
+        goal[AWAY] = race.awayGoal;
+    }
+
+    /** Re-resolves and repaints. Deliberately does not run the match-over prompt: a race that
+     *  arrives from the server is not a point the operator just scored. */
+    private void applyRace() {
+        recomputeRace();
+        updateRaceLine();
+        refresh(HOME);
+        refresh(AWAY);
+    }
+
+    /** Drops the operator's deviation, so the bracket's race applies again. Inputs only. */
+    private void resetOverride() {
+        raceOverridden = false;
+        goalOverride[HOME] = 0;
+        goalOverride[AWAY] = 0;
+    }
+
+    /** The match's own division's race, or 0 when the read did not give us one. */
+    private int divisionRaceOf(TournamentApi.Match m) {
+        if (m == null || m.divisionId == null) {
+            return 0;
+        }
+        for (TournamentApi.Division division : divisions) {
+            if (m.divisionId.equals(division.id)) {
+                return division.raceTo;
+            }
+        }
+        return 0;
+    }
 
     /**
      * Each side has its own goal, so uneven goals are a handicap. Reaching one ends the match, but the
@@ -1012,23 +1122,61 @@ public class MainActivity extends Activity {
                 .show();
     }
 
+    /**
+     * The race line, which now says where the race came from. Three states, and the operator must be
+     * able to tell them apart at a glance:
+     *
+     * <ul>
+     *   <li><b>the bracket's race</b> - the ordinary case: "Race to 7 \u00b7 from the bracket", or
+     *       "the bracket's match override" when the target was set on this match rather than its
+     *       division;</li>
+     *   <li><b>a local override</b> - named as one, with the bracket's own number beside it, so a
+     *       handicap cannot be mistaken for what the bracket asked for;</li>
+     *   <li><b>no race from the bracket</b> - an older server, an offline read, or a tournament with
+     *       no race; today's behaviour, and it says as much.</li>
+     * </ul>
+     */
     private void updateRaceLine() {
         if (linkedRace == null) {
             return;
         }
-        if (goal[HOME] == 0 && goal[AWAY] == 0) {
-            linkedRace.setText(getString(R.string.linked_race_none, goalUnit()));
+        if (race.source == Race.FROM_LOCAL) {
+            String pair = getString(R.string.linked_race_pair, goalText(HOME), goalText(AWAY));
+            linkedRace.setText(race.hasBracket()
+                    ? getString(R.string.linked_race_local, goalUnit(), pair, race.bracketRaceTo)
+                    : getString(R.string.linked_race_local_none, goalUnit(), pair));
             return;
         }
-        linkedRace.setText(getString(R.string.linked_race_fmt, goalUnit(),
-                goal[HOME] == 0 ? "\u2014" : String.valueOf(goal[HOME]),
-                goal[AWAY] == 0 ? "\u2014" : String.valueOf(goal[AWAY])));
+        if (race.hasBracket()) {
+            int line = R.string.linked_race_bracket;
+            if (race.source == Race.FROM_MATCH) {
+                line = R.string.linked_race_bracket_match;
+            } else if (race.source == Race.FROM_DEFAULT) {
+                line = R.string.linked_race_bracket_default;
+            }
+            linkedRace.setText(getString(line, goalUnit(), race.bracketRaceTo));
+            return;
+        }
+        linkedRace.setText(getString(R.string.linked_race_byhand, goalUnit()));
     }
 
+    /** A side's goal as the race line writes it: a dash where that side has none. */
+    private String goalText(int side) {
+        return goal[side] == 0 ? "\u2014" : String.valueOf(goal[side]);
+    }
+
+    /**
+     * The operator's goals, by hand. This is now the deviation rather than the normal path: the
+     * dialog names the bracket's race, and what is typed here overrides it for this table only (an
+     * uneven handicap, a different target, or no goal at all). Typing the bracket's own number back
+     * in is not a deviation, and the neutral button drops the override entirely - which is the only
+     * way back to the bracket's race, so it cannot be left on by accident.
+     */
     private void openGoalsDialog() {
         if (!loaded) {
             return;
         }
+        final boolean bracket = race.hasBracket();
         final EditText homeInput = goalField(name[HOME], goal[HOME]);
         final EditText awayInput = goalField(name[AWAY], goal[AWAY]);
         LinearLayout box = new LinearLayout(this);
@@ -1038,26 +1186,52 @@ public class MainActivity extends Activity {
         box.addView(homeInput);
         box.addView(awayInput);
 
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.linked_goals_title)
-                .setMessage(R.string.linked_goals_hint)
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
+                .setTitle(bracket ? R.string.linked_goals_title : R.string.linked_goals_title_none)
+                .setMessage(bracket
+                        ? getString(R.string.linked_goals_hint, goalUnit(), race.bracketRaceTo)
+                        : getString(R.string.linked_goals_hint_none))
                 .setView(box)
                 .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface d, int which) {
-                        goal[HOME] = parseGoal(homeInput.getText().toString());
-                        goal[AWAY] = parseGoal(awayInput.getText().toString());
-                        goalPrompted[HOME] = false;
-                        goalPrompted[AWAY] = false;
-                        updateRaceLine();
-                        refresh(HOME);
-                        refresh(AWAY);
-                        checkGoal(HOME);
-                        checkGoal(AWAY);
+                        applyGoals(parseGoal(homeInput.getText().toString()),
+                                parseGoal(awayInput.getText().toString()));
                     }
                 })
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
+                .setNegativeButton(android.R.string.cancel, null);
+        if (bracket) {
+            builder.setNeutralButton(R.string.linked_goals_clear, new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface d, int which) {
+                    resetOverride();
+                    applyRace();
+                    // A neutral button does not close the dialog on its own.
+                    d.dismiss();
+                }
+            });
+        }
+        builder.show();
+    }
+
+    /**
+     * Records what the operator typed. A pair that deviates from the bracket's race becomes the
+     * override; a pair that is the bracket's own race drops the override instead, so nothing on
+     * screen can claim a deviation that is not one.
+     */
+    private void applyGoals(int home, int away) {
+        if (Race.deviates(race.bracketRaceTo, home, away)) {
+            raceOverridden = true;
+            goalOverride[HOME] = home;
+            goalOverride[AWAY] = away;
+        } else {
+            resetOverride();
+        }
+        goalPrompted[HOME] = false;
+        goalPrompted[AWAY] = false;
+        applyRace();
+        checkGoal(HOME);
+        checkGoal(AWAY);
     }
 
     private EditText goalField(String hint, int value) {
@@ -1089,31 +1263,33 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** The payload the server stores verbatim: their {"score":"a-b"} convention plus our detail. */
+    /**
+     * The payload the server stores verbatim: their {"score":"a-b"} convention plus our detail.
+     * The fields, their order, the race's provenance and the tally marker come from
+     * {@link ResultPayload}, which is pure so tools/check-race.sh can assert the shape without a
+     * device.
+     */
     private JSONObject buildScores() {
         JSONObject scores = new JSONObject();
-        try {
-            scores.put("score", score[HOME] + "-" + score[AWAY]);
-            scores.put("home", score[HOME]);
-            scores.put("away", score[AWAY]);
-            scores.put("homeName", name[HOME]);
-            scores.put("awayName", name[AWAY]);
-            if (tournament != null && tournament.game != null && !tournament.game.isEmpty()) {
-                scores.put("discipline", tournament.game);   // whatever the director chose
+        for (ResultPayload.Field field : ResultPayload.fields(name[HOME], name[AWAY],
+                score[HOME], score[AWAY], tournament == null ? null : tournament.game,
+                appVersion(), race)) {
+            try {
+                scores.put(field.key, field.value);
+            } catch (JSONException ignored) {
+                // JSONObject.put only throws on NaN/infinite numbers, which these values cannot be
             }
-            scores.put("app", "score-android");
-            scores.put("appVersion", 1);
-            if (goal[HOME] > 0 || goal[AWAY] > 0) {
-                // The server has nowhere to keep a race, so the goal travels with the result - the
-                // only place it can persist. Uneven goals are a handicap, so both are recorded.
-                scores.put("homeGoal", goal[HOME]);
-                scores.put("awayGoal", goal[AWAY]);
-                scores.put("raceTo", Math.max(goal[HOME], goal[AWAY]));
-            }
-        } catch (JSONException ignored) {
-            // JSONObject.put only throws on NaN/infinite numbers, which ints cannot be
         }
         return scores;
+    }
+
+    /** This build's own version name, so a stored sheet says which app produced it. */
+    private String appVersion() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (PackageManager.NameNotFoundException e) {
+            return "";
+        }
     }
 
     private void setStatus(String text) {

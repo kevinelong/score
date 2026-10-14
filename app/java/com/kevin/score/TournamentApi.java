@@ -25,6 +25,13 @@ import java.util.List;
  * their docs - including that {@code score} is free-form JSON the server stores verbatim, that
  * {@code result} and {@code reopen} require an {@code Idempotency-Key}, and that every non-GET needs
  * their {@code X-CO} header.
+ *
+ * <p>The one exception is the race: a match payload now carries a resolved {@code raceTo}
+ * ({@code matches.race_to}, then {@code divisions.race_to}, then the game's own default) and the
+ * tournament read carries each division's own, which is what lets the app say which level set it.
+ * Those fields follow the server's new columns rather than a run against it; the server this app was
+ * verified against predates them, which is why a payload without them is a supported case rather than
+ * an error (see {@link Race}).
  */
 final class TournamentApi {
 
@@ -80,9 +87,24 @@ final class TournamentApi {
         final String winnerEntrantId;
         final String matchLabel;
         final String tableRef;
+        /** The division this match belongs to; null when the payload names none. */
+        final String divisionId;
+        /**
+         * The race this match is played to, already resolved by the server (match, then division,
+         * then the game's own default). 0 when the payload carries none - a server that predates the
+         * column, or a tournament with no race at all.
+         */
+        final int raceTo;
+        /**
+         * The layer that supplied {@link #raceTo}: {@code "match"}, {@code "division"} or
+         * {@code "default"}. Empty when the payload does not name one, in which case the app falls
+         * back to comparing the two values (see {@link Race#source}).
+         */
+        final String raceFrom;
 
         Match(String id, String state, String entrantAId, String entrantBId,
-              String winnerEntrantId, String matchLabel, String tableRef) {
+              String winnerEntrantId, String matchLabel, String tableRef, String divisionId,
+              int raceTo, String raceFrom) {
             this.id = id;
             this.state = state;
             this.entrantAId = entrantAId;
@@ -90,6 +112,9 @@ final class TournamentApi {
             this.winnerEntrantId = winnerEntrantId;
             this.matchLabel = matchLabel;
             this.tableRef = tableRef;
+            this.divisionId = divisionId;
+            this.raceTo = raceTo;
+            this.raceFrom = raceFrom;
         }
 
         boolean isScoreable() {
@@ -141,6 +166,34 @@ final class TournamentApi {
 
         boolean isScorable() {
             return "in_progress".equals(state) || "completed".equals(state);
+        }
+    }
+
+    /**
+     * A division, of which only its own race matters here: the match payload's {@code raceTo} is
+     * already resolved, so comparing the two is what tells a division target from a match override.
+     */
+    static final class Division {
+        final String id;
+        final String name;
+        /** The division's own target: 0 when it has none. */
+        final int raceTo;
+
+        Division(String id, String name, int raceTo) {
+            this.id = id;
+            this.name = name;
+            this.raceTo = raceTo;
+        }
+    }
+
+    /** One read of {@code /tournaments/{id}}: the tournament and the divisions it holds. */
+    static final class TournamentRead {
+        final Tournament tournament;
+        final List<Division> divisions;
+
+        TournamentRead(Tournament tournament, List<Division> divisions) {
+            this.tournament = tournament;
+            this.divisions = divisions;
         }
     }
 
@@ -242,18 +295,22 @@ final class TournamentApi {
                 parseMatches(body.optJSONArray("matches")));
     }
 
-    Tournament[] tournament(String slugOrId) throws ApiError {
+    /**
+     * One read of {@code /tournaments/{slugOrId}}: the tournament, and its divisions with their own
+     * race targets. The link may carry a slug, so the canonical id it returns is what everything
+     * after this uses.
+     */
+    TournamentRead readTournament(String slugOrId) throws ApiError {
         JSONObject body = request("GET", "/tournaments/" + encode(slugOrId), null, null);
-        JSONArray divisions = body.optJSONArray("divisions");
-        List<Tournament> out = new ArrayList<Tournament>();
         JSONObject t = body.optJSONObject("tournament");
-        if (t != null) {
-            out.add(new Tournament(t.optString("id"), t.optString("name"), t.optString("state"),
-                    t.optString("visibility"), t.optString("game")));
-        } else if (divisions == null) {
+        JSONArray divisions = body.optJSONArray("divisions");
+        if (t == null && divisions == null) {
             throw new ApiError(0, "bad_response", "No tournament in the response");
         }
-        return out.toArray(new Tournament[0]);
+        Tournament tournament = t == null ? null
+                : new Tournament(t.optString("id"), t.optString("name"), t.optString("state"),
+                        t.optString("visibility"), t.optString("game"));
+        return new TournamentRead(tournament, parseDivisions(divisions));
     }
 
     List<Entrant> entrants(String tournamentId) throws ApiError {
@@ -279,6 +336,19 @@ final class TournamentApi {
         return out;
     }
 
+    private static List<Division> parseDivisions(JSONArray items) {
+        List<Division> out = new ArrayList<Division>();
+        for (int i = 0; items != null && i < items.length(); i++) {
+            JSONObject item = items.optJSONObject(i);
+            if (item == null) {
+                continue;
+            }
+            out.add(new Division(item.optString("id"), item.optString("name"),
+                    positiveInt(item, "raceTo")));
+        }
+        return out;
+    }
+
     private static List<Match> parseMatches(JSONArray items) {
         List<Match> out = new ArrayList<Match>();
         for (int i = 0; items != null && i < items.length(); i++) {
@@ -290,9 +360,18 @@ final class TournamentApi {
                     item.optString("entrantAId"), item.optString("entrantBId"),
                     item.isNull("winnerEntrantId") ? null : item.optString("winnerEntrantId"),
                     item.isNull("matchLabel") ? null : item.optString("matchLabel"),
-                    item.isNull("tableRef") ? null : item.optString("tableRef")));
+                    item.isNull("tableRef") ? null : item.optString("tableRef"),
+                    item.isNull("divisionId") ? null : item.optString("divisionId"),
+                    positiveInt(item, "raceTo"),
+                    item.optString("raceFrom", "")));
         }
         return out;
+    }
+
+    /** A count that is only meaningful above zero, so absent, null and negative all read as 0. */
+    private static int positiveInt(JSONObject item, String key) {
+        int value = item.optInt(key, 0);
+        return value > 0 ? value : 0;
     }
 
     // ------------------------------------------------------------------ writing

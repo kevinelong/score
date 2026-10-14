@@ -8,7 +8,7 @@ is what makes a published hash worth anything:
 
 | Artifact | Size | Purpose |
 | --- | --- | --- |
-| `out/score.apk` | 79,245 bytes, `a805fa00…67f61f2f` | debug-signed, for the dev loop (`sh build.sh`); signed with the git-ignored `tools/debug.keystore`, so this hash is this machine's build of the current source |
+| `out/score.apk` | 83,341 bytes, `43cddf3d…238d48b9` | debug-signed, for the dev loop (`sh build.sh`); signed with the git-ignored `tools/debug.keystore`, so this hash is this machine's build of the current source |
 | `out/score-release.apk` | 87,431 bytes, `6cf0081f…c51868e01e` | release-signed with the project's own 4096-bit key (`SIGN=release sh build.sh`) |
 
 `sh tools/check-release.sh` re-reads both artifacts and fails if the sizes, hashes,
@@ -330,8 +330,10 @@ taps, flicks and rotates the display, so it needs the phone unlocked and undistu
 
 ```
 app/AndroidManifest.xml                      package com.kevin.score, minSdk 21, targetSdk 34
-app/java/com/kevin/score/MainActivity.java   all behaviour (single activity, ~1,290 lines)
+app/java/com/kevin/score/MainActivity.java   all behaviour (single activity, ~1,400 lines)
 app/java/com/kevin/score/TournamentApi.java  the tournament server client (link, reads, submit, correct)
+app/java/com/kevin/score/Race.java           the race resolution and its provenance (pure: no Android)
+app/java/com/kevin/score/ResultPayload.java  the stored result payload's shape (pure: no Android)
 app/java/com/kevin/score/SwipePanel.java     root layout that owns the swipe gesture
 app/res/layout/activity_main.xml             the single screen
 app/res/values/{strings,colors,styles}.xml
@@ -354,6 +356,8 @@ tools/dev-server.py                          local mirror of the nginx mapping f
 tools/probe_screens.py                       pixel-probe screenshots (panel colours, divider, glyphs)
 tools/make-release-key.sh                    one-off: the 4096-bit release signing key
 tools/check-release.sh                       the built APKs against every documented size, hash, version and permission
+tools/check-race.sh                          the race resolution and the payload, on a plain JVM (no device)
+tools/race-check/RaceCheck.java              the assertions check-race.sh runs (135 of them)
 tools/bootstrap-go.sh                        portable Go, for the reference tournament server
 verify/                                      phone/AVD screenshots from the current build (probe inputs)
 LICENSE                                      FSL-1.1-MIT (source-available; MIT after two years)
@@ -514,10 +518,21 @@ installed, that same link opens the tournament's web console in a browser. The s
 - **The entrants become HOME and AWAY.** Taps and swipes tally them; **Submit result** asks which side
   won and records it, and **Correct result** reopens a recorded match to fix it (the server requires a
   reason, and keeps the previous result as a new version).
-- **Races to a goal, per side.** Tap the race line to set a target for each side — uneven goals are a
-  handicap. When either side reaches theirs the app says the match is over and offers **Submit result**
-  or **keep editing**; carrying on past the goal does not nag, and dropping back below and re-reaching
-  it asks again. The goals travel in the result payload, because the server has nowhere to keep one.
+- **The race comes from the bracket.** The tournament server keeps a race target (a division's target,
+  or a per-match override for a longer final) and resolves it into the match the link opens; the app
+  reads it and plays both sides to it, so an ordinary match needs no typing at all. The race line says
+  where the race came from — the division's target, the bracket's per-match override, the discipline's
+  default, or an explicit override the operator typed — and labels it for the discipline ("Race to 7",
+  "Points to 100"). Tapping it is still how an uneven handicap or a different target is set, and that is
+  worded as the deviation it is (`LOCAL OVERRIDE · Race to 5 – 4 · the bracket's race is 7`), on the
+  race line and under the name. When either side reaches its goal the app says the match is over and
+  offers **Submit result** or **keep editing**; carrying on past the goal does not nag, and dropping back
+  below and re-reaching it asks again.
+- **The result carries the race, and where it came from.** Alongside the tallies and the goals, the
+  payload records `raceTo`, `raceFrom` (the console's own word for the origin), `raceSource` (the finer
+  layer: `division`, `match`, `default`, `local`) and the bracket's own `bracketRaceTo` when the desk
+  deviated, plus `sheetKind: "tally"` so a 14.1 tally is never read as a full rack sheet. See
+  [docs/LINKED-MATCH-DESIGN.md](docs/LINKED-MATCH-DESIGN.md) for the shape field by field.
 - **Retry is idempotent**: the same `Idempotency-Key` is reused, so a submit that actually landed is
   never recorded twice, and a failure keeps the tallies.
 - **The link opens the app when installed and the browser when not** (Android App Links). Development
@@ -538,6 +553,20 @@ adb shell am start -a android.intent.action.VIEW \
 
 `python tools/drive-ui.py` drives a device by reading its widget tree (dump / tap / swipe / hold /
 shot), which is how the linked flow was verified screen by screen.
+
+The race resolution and the result payload are **pure** (`Race.java`, `ResultPayload.java`: no Android,
+no `org.json`), so the one part of this that does not need a device is checked on a plain JVM:
+
+```sh
+sh tools/check-race.sh     # 135 assertions: the resolution order, the provenance, the payload's shape
+```
+
+It asserts that a per-match override beats the division's target, that the bracket's race beats a local
+goal that was never claimed as an override, that a claimed override beats both, what each case records
+as the race's provenance and which label the discipline implies — and it fails loudly rather than
+silently, which was checked by breaking each guard in turn (the rounds are listed in
+`CONTINUE-HERE.md`). Everything a person *looks* at — the race line's wording, the override dialog, the
+goal line under a name — renders on the platform and is listed there as device-only.
 
 ## Licence
 

@@ -41,22 +41,34 @@
     <string name="linked_names_from_server">Team names come from the tournament</string>
     <string name="linked_offline_retry">Kept your tallies \u2014 retry sends the same result, so it cannot be recorded twice</string>
 
-    <!-- Goals: each side has its own target, so uneven goals are a handicap. The wording follows
-         the tournament's discipline: a race of games ("Race to 7") or a points target ("Points to
-         100") - the same two labels their own console uses. -->
+    <!-- Goals: the race comes from the bracket now - a division's target, or a per-match override -
+         and each side still carries its own goal, so uneven goals are a handicap. What an operator
+         types is a deviation from the bracket's race and is worded as one. The unit label follows the
+         tournament's discipline: a race of games ("Race to 7") or a points target ("Points to 100") -
+         the same two labels their own console uses. -->
     <string name="unit_race">Race to</string>
     <string name="unit_points">Points to</string>
-    <string name="linked_race_none">%1$s \u2014  \u00b7  tap to set goals</string>
-    <string name="linked_race_fmt">%1$s %2$s \u2013 %3$s  \u00b7  tap to change</string>
-    <string name="linked_goals_title">Goals</string>
-    <string name="linked_goals_hint">Leave a side blank for no goal. Uneven goals are a handicap.</string>
+    <string name="linked_race_pair">%1$s \u2013 %2$s</string>
+    <string name="linked_race_bracket">%1$s %2$d  \u00b7  from the bracket</string>
+    <string name="linked_race_bracket_match">%1$s %2$d  \u00b7  the bracket\'s match override</string>
+    <string name="linked_race_bracket_default">%1$s %2$d  \u00b7  the discipline\'s default, no target set</string>
+    <string name="linked_race_local">LOCAL OVERRIDE \u00b7 %1$s %2$s  \u00b7  the bracket\'s race is %3$d  \u00b7  tap to change</string>
+    <string name="linked_race_local_none">%1$s %2$s  \u00b7  set by hand \u2014 the bracket has no race  \u00b7  tap to change</string>
+    <string name="linked_race_byhand">%1$s \u2014  \u00b7  no race from the bracket \u2014 tap to set goals by hand</string>
+    <string name="linked_goals_title">Override the race</string>
+    <string name="linked_goals_title_none">Goals</string>
+    <string name="linked_goals_hint">The bracket\'s race is %1$s %2$d. Type a goal to score this table differently; a side left blank has none.</string>
+    <string name="linked_goals_hint_none">The bracket has no race for this match. A side left blank has no goal.</string>
+    <string name="linked_goals_clear">Bracket\'s race</string>
     <string name="linked_goal_title">Match over</string>
     <string name="linked_goal_reached">%1$s has reached %2$d.</string>
     <string name="linked_goal_hint">Submit the result, or keep editing if that was a mistake.</string>
     <string name="linked_goal_submit">Submit result</string>
     <string name="linked_goal_keep">Keep editing</string>
     <string name="linked_goal_short">%1$s %2$d</string>
+    <string name="linked_goal_short_local">%1$s %2$d \u00b7 local override</string>
     <string name="linked_goal_match_point">%1$s %2$d \u00b7 match point</string>
+    <string name="linked_goal_match_point_local">%1$s %2$d \u00b7 local override \u00b7 match point</string>
     <string name="cd_score_goal">%1$s score %2$s, %3$s %4$d. Tap to add a point.</string>
 
     <!-- Table number: venues call matches by table, so the number leads the linked bar -->
