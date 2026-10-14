@@ -1,6 +1,6 @@
 # Score — state for a restart
 
-Written 2026-10-12 so nothing is lost across a restart. Two repositories:
+Written 2026-10-12, last updated 2026-10-14, so nothing is lost across a restart. Two repositories:
 
 - **`C:/Users/kevin/score`** — the Android scoreboard app (public: `kevinelong/score`,
   release repo `kevinelong/score-android`).
@@ -34,6 +34,29 @@ New in 1.4, all driven on the emulator before shipping:
 Evidence lives in `verify/` (trace screenshots, pixel probes, and `webapp-sheet-*.png` for the web
 work below). The regression harness is `tools/verify-ui.sh emulator-5554 emu-`; `tools/drive-ui.py`
 drives a single screen by hand.
+
+## Verification added 2026-10-14
+
+The UI suites need an emulator, so nothing here could be checked cheaply. `tools/check-release.sh`
+now reads the built APKs themselves — badging, size, SHA-256 — and fails when they disagree with
+`README.md`, with `build.sh`, or with `score-dist` and the APK it distributes. `--rebuild` proves the
+digests repeat; `--online` also compares the published GitHub release asset and the hash in its
+notes. The distribution repository has the matching `verify-release.sh`, which downloads the
+published asset and checks it against that README, the notes and the committed copy.
+
+Two things it established the first time it ran:
+
+- The README's debug hash was **stale**: `44835f23…` was a versionCode 4 / versionName 1.3 build from
+  before the 1.4 bump. The row now records `a805fa00…67f61f2f`, the current reproducible build, and
+  says the debug keystore is git-ignored so that hash is this machine's.
+- **The byte-reproducible build claim is true, and is now tested.** Three debug builds gave
+  `a805fa00…` each time and two release builds gave `6cf0081f…`, byte-identical to the shipped 1.4
+  APK. Between the old debug APK and a fresh one only the manifest differs — two bytes, versionCode
+  and versionName; `classes.dex` and every resource are identical, and the zip timestamps are already
+  pinned to the DOS epoch.
+
+`README.md` and `CONTINUE-HERE.md` are not read by the checker except for the artifact table, so keep
+that table exact when anything is rebuilt or re-shipped.
 
 ## Waiting for review — a local branch in the clone (nothing pushed)
 
@@ -90,7 +113,13 @@ Drop `OPEN_MATCH_EDITING=1` to exercise the app's read-only path.
 # the app
 sh build.sh                          # debug APK -> out/score.apk
 SIGN=release sh build.sh             # release APK -> out/score-release.apk
+sh tools/check-release.sh            # the APKs vs every documented size, hash, version, permission
+sh tools/check-release.sh --rebuild  # and prove the digests repeat
+sh tools/check-release.sh --online   # and compare the published release asset
 sh tools/verify-ui.sh emulator-5554 emu-      # the standalone regression trace
+
+# the distribution repository (and what a stranger downloads)
+(cd ../score-dist && sh verify-release.sh)
 
 # the web work, in the clone
 node sheets.test.js && node bracket.test.js && node roster.test.js \
