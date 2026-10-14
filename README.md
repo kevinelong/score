@@ -8,8 +8,12 @@ is what makes a published hash worth anything:
 
 | Artifact | Size | Purpose |
 | --- | --- | --- |
-| `out/score.apk` | 79,245 bytes, `44835f23…a62264f7` | debug-signed, for the dev loop (`sh build.sh`) |
+| `out/score.apk` | 79,245 bytes, `a805fa00…67f61f2f` | debug-signed, for the dev loop (`sh build.sh`); signed with the git-ignored `tools/debug.keystore`, so this hash is this machine's build of the current source |
 | `out/score-release.apk` | 87,431 bytes, `6cf0081f…c51868e01e` | release-signed with the project's own 4096-bit key (`SIGN=release sh build.sh`) |
+
+`sh tools/check-release.sh` re-reads both artifacts and fails if the sizes, hashes,
+versions or permissions here disagree with the bytes; `--rebuild` proves the digests
+repeat, and `--online` also compares the published GitHub release asset.
 
 ## Behaviour
 
@@ -349,6 +353,7 @@ tools/drive-ui.py                            drive a device by its widget tree (
 tools/dev-server.py                          local mirror of the nginx mapping for linked-match work
 tools/probe_screens.py                       pixel-probe screenshots (panel colours, divider, glyphs)
 tools/make-release-key.sh                    one-off: the 4096-bit release signing key
+tools/check-release.sh                       the built APKs against every documented size, hash, version and permission
 tools/bootstrap-go.sh                        portable Go, for the reference tournament server
 verify/                                      phone/AVD screenshots from the current build (probe inputs)
 LICENSE                                      FSL-1.1-MIT (source-available; MIT after two years)
