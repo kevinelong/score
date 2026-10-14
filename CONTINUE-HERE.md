@@ -112,16 +112,33 @@ What changed here:
 
 Three gaps the work left open, deliberately:
 
-1. **No full device run.** Reading a real bracket race needs a server with the columns.
-   `tools/verify-ui.sh emulator-5554 emu2-` **was runnable** and traces this build: every row up to the
-   rename section matched the documented 1.4 trace, then it stopped with `uiautomator dump failed` at the
-   rename dwell (a harness/emulator dump failure, not an app assertion), so that trace is partial — and
-   it drives standalone scoring only, never the race. What only a device can confirm: the race line's
-   wording in each of the five states, the override dialog's three buttons, the goal line under a name,
-   the long `LOCAL OVERRIDE …` line wrapping in portrait, and the payload arriving in `match_results`
-   from a real submit.
+1. **The wire between the two clients is still unproven end to end** — a real submit from the phone read
+   back as a stored payload. Attempted on 2026-10-14 and **blocked by a peer holding the port, so it was
+   not fought**: the AVD was up (`emulator-5554`), the reference server was rebuilt with the race code
+   (`bin/fifteenball-server.exe`, 14:08), the fixture DB was reachable, and the app installed — but
+   another process already owned `127.0.0.1:8093` (`listen tcp 127.0.0.1:8093: bind: Only one usage of
+   each socket address`), that instance serves the shared fixture DB with its own view of it, and its
+   matches read `raceFrom: "default"` because `divisions.race_to` is NULL in the fixture. Driving a
+   bracket-set race would have meant mutating a DB another agent is using, so the pass was abandoned
+   rather than forced. What the attempt *did* establish: `GET /tournaments/{id}/matches` from a live
+   server does carry `raceTo` and `raceFrom` in the shape this app reads.
+   State left as found: the `divisions.race_to=7` and `matches.state` values I set to stage the run were
+   both restored (`divisions.race_to` NULL, `m_t_race_001_1` back to `in_progress`), verified by
+   reading the DB back.
+   Re-doing it needs a free port (or the peer's server stopped) and a fixture with a **bracket-set**
+   race: `UPDATE divisions SET race_to=7 WHERE id='d_t_race_001'`, then open
+   `scoreboard://match?url=http%3A%2F%2F10.0.2.2%3A8093%2Flive.html%3Ft%3Dt_race_001` (no proxy needed —
+   the app derives `/api/v1` from the link's directory), tally home to the goal, submit, and read
+   `match_results.payload_json` back with `python -c "import sqlite3; …"` (the history endpoint is
+   session-gated, so the DB file is the cheap read).
+   - **No full device run of the race surfaces.** `tools/verify-ui.sh emulator-5554 emu2-` **was runnable**
+   and traced this build: every row up to the rename section matched the documented 1.4 trace, then it
+   stopped with `uiautomator dump failed` at the rename dwell (a harness/emulator dump failure, not an app
+   assertion), so that trace is partial — and it drives standalone scoring only, never the race. What only
+   a device can confirm: the race line's wording in each of the five states, the override dialog's three
+   buttons, the goal line under a name, and the long `LOCAL OVERRIDE …` line wrapping in portrait.
 2. **Not shipped.** The version is still 1.4 / versionCode 5 and only the debug APK was rebuilt
-   (`out/score.apk` 83,341 bytes, `6bd778b8…13e15579`); `out/score-release.apk` is left as the shipped
+   (`out/score.apk` 83,341 bytes, `7b3798cc…80564301`); `out/score-release.apk` is left as the shipped
    1.4 bytes so `tools/check-release.sh` still agrees with `score-dist`. Shipping this needs the bump
    (1.5 / 6), both APKs rebuilt, the README table and `score-dist` updated together, and a release cut.
 3. **`appVersion` is now a string** (`"1.4"`, the app build) rather than the int the payload used to
