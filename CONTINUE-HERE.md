@@ -84,18 +84,38 @@ What changed here:
   `payloadVersion: 2`; `app` stays `score-android` and `appVersion` became the app build read from the
   package. The endpoint, the `Idempotency-Key` and the read-only fallback are untouched, and no bracket
   card gained a score.
-- **`tools/check-race.sh` + `tools/race-check/RaceCheck.java`** (new): 135 assertions on a plain JVM.
+- **`tools/check-race.sh` + `tools/race-check/RaceCheck.java`** (new): 143 assertions on a plain JVM.
+
+**Reconciled with the server side (branch `sheet-stack`, commit `2beaaa6`), which landed mid-work:**
+
+- The **match payload's `raceFrom`** is `"match" | "division" | "default"` — verified in their
+  `resolveRaceTo` (`internal/api/games.go`) and the `Match` struct, not taken on trust. That is what the
+  app *reads*. It accepts `"bracket"` as well (the console's word for the same idea), and infers the
+  layer from the two values when a server names none, so an older server still resolves correctly.
+- The **saved sheet record's `raceFrom`** is a different field with a different vocabulary
+  (`bracket | local | override | unknown`, `sheet-payload.js`). That is what the app *writes*:
+  `raceFrom` in the payload uses the console's words, `raceSource` carries the finer layer the brief
+  asked for (`division` vs `match` vs `default`, which the console's three words cannot express), and
+  `sheetKind: "tally"` + `payloadVersion` + `app: "score-android"` match the record. Same-name fields on
+  two objects, so the docs say which is which.
+- The per-match override is a **new** route: `PATCH /api/v1/tournaments/{id}/matches/{matchId}` body
+  `{"raceTo": <int|null>}`, director+, audited, outside the open-scoring group (and
+  `PATCH …/divisions/{divisionId}` for the division layer). The app calls neither — it sets no layer,
+  it only reads the resolution — and it was never coded against an assumed existing patch.
+- Submission is untouched: the same `result` endpoint and the same `Idempotency-Key`.
 
 Three gaps the work left open, deliberately:
 
-1. **No device run.** Reading a real bracket race needs a server with the new columns; the clone has
-   them in its working tree but nothing here has been driven against it. What only a device (or the
-   emulator) can confirm: the race line's wording in each of the five states, the override dialog's
-   three buttons, the goal line under a name, the long `LOCAL OVERRIDE …` line wrapping in portrait,
-   and the payload arriving in `match_results` from a real submit. `tools/verify-ui.sh` covers
-   standalone scoring only, so it does not touch any of that — it was not run for this change.
+1. **No full device run.** Reading a real bracket race needs a server with the columns.
+   `tools/verify-ui.sh emulator-5554 emu2-` **was runnable** and traces this build: every row up to the
+   rename section matched the documented 1.4 trace, then it stopped with `uiautomator dump failed` at the
+   rename dwell (a harness/emulator dump failure, not an app assertion), so that trace is partial — and
+   it drives standalone scoring only, never the race. What only a device can confirm: the race line's
+   wording in each of the five states, the override dialog's three buttons, the goal line under a name,
+   the long `LOCAL OVERRIDE …` line wrapping in portrait, and the payload arriving in `match_results`
+   from a real submit.
 2. **Not shipped.** The version is still 1.4 / versionCode 5 and only the debug APK was rebuilt
-   (`out/score.apk` 87,437 bytes, `50e1e290…562aa52c`); `out/score-release.apk` is left as the shipped
+   (`out/score.apk` 83,341 bytes, `6bd778b8…13e15579`); `out/score-release.apk` is left as the shipped
    1.4 bytes so `tools/check-release.sh` still agrees with `score-dist`. Shipping this needs the bump
    (1.5 / 6), both APKs rebuilt, the README table and `score-dist` updated together, and a release cut.
 3. **`appVersion` is now a string** (`"1.4"`, the app build) rather than the int the payload used to
@@ -117,6 +137,7 @@ Three gaps the work left open, deliberately:
 | `deviates()` treating the bracket's own number as a deviation | 2 FAILs | yes |
 | `PAYLOAD_VERSION` → 1 | 1 FAIL: `payloadVersion got 1, want 2` | yes |
 | `bracketSource` inference (second attempt, after adding the missing row) | 1 FAIL: `provenance got "division", want "match"` | yes |
+| the console's `bracket` word reaching the read side | 1 FAIL: `provenance got "division", want "bracket"` | yes |
 
 That last one is the point of doing them: the first attempt **passed**, because no row covered a server
 that names no layer. The row was added, the guard re-broken, and then it went red.

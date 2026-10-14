@@ -8,7 +8,7 @@ is what makes a published hash worth anything:
 
 | Artifact | Size | Purpose |
 | --- | --- | --- |
-| `out/score.apk` | 83,341 bytes, `43cddf3d…238d48b9` | debug-signed, for the dev loop (`sh build.sh`); signed with the git-ignored `tools/debug.keystore`, so this hash is this machine's build of the current source |
+| `out/score.apk` | 83,341 bytes, `6bd778b8…13e15579` | debug-signed, for the dev loop (`sh build.sh`); signed with the git-ignored `tools/debug.keystore`, so this hash is this machine's build of the current source |
 | `out/score-release.apk` | 87,431 bytes, `6cf0081f…c51868e01e` | release-signed with the project's own 4096-bit key (`SIGN=release sh build.sh`) |
 
 `sh tools/check-release.sh` re-reads both artifacts and fails if the sizes, hashes,
@@ -357,7 +357,7 @@ tools/probe_screens.py                       pixel-probe screenshots (panel colo
 tools/make-release-key.sh                    one-off: the 4096-bit release signing key
 tools/check-release.sh                       the built APKs against every documented size, hash, version and permission
 tools/check-race.sh                          the race resolution and the payload, on a plain JVM (no device)
-tools/race-check/RaceCheck.java              the assertions check-race.sh runs (135 of them)
+tools/race-check/RaceCheck.java              the assertions check-race.sh runs (143 of them)
 tools/bootstrap-go.sh                        portable Go, for the reference tournament server
 verify/                                      phone/AVD screenshots from the current build (probe inputs)
 LICENSE                                      FSL-1.1-MIT (source-available; MIT after two years)
@@ -558,7 +558,7 @@ The race resolution and the result payload are **pure** (`Race.java`, `ResultPay
 no `org.json`), so the one part of this that does not need a device is checked on a plain JVM:
 
 ```sh
-sh tools/check-race.sh     # 135 assertions: the resolution order, the provenance, the payload's shape
+sh tools/check-race.sh     # 143 assertions: the resolution order, the provenance, the payload's shape
 ```
 
 It asserts that a per-match override beats the division's target, that the bracket's race beats a local

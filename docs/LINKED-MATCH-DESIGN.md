@@ -293,23 +293,45 @@ listed below as a decision rather than assumed.
 ### The race coming from the bracket (this change)
 
 Everything above was run against a server that predates `race_to`. The columns and the payload fields
-this change reads were **not** exercised against a live bracket here; a device run needs a server that
-has them. What was exercised:
+this change reads were **not** exercised against a live bracket here. What *was* checked is that the
+names are the ones the server actually ships: on branch `sheet-stack` (commit `2beaaa6`),
+`resolveRaceTo` in their `internal/api/games.go` returns the layer as **`"match"`, `"division"` or
+`"default"`**, and the `Match` struct documents `raceTo`/`raceFrom` the same way — so the app reads the
+match payload's `raceFrom` with those three words and falls back to comparing the two values when a
+server names nothing.
 
-- **`sh tools/check-race.sh`** — 135 assertions, all passing, on a plain JVM: the resolution order (a
+Do not confuse it with the console's **saved sheet record** (`sheet-payload.js`), whose `raceFrom`
+speaks a different vocabulary (`bracket` | `local` | `override` | `unknown`). Two fields, same name,
+different objects: this app *reads* the server's one and *writes* the record's one, so a sheet saved by
+the phone and one saved by the console read the same way. `"bracket"` is accepted on the read side too,
+because it means what this app means by it.
+
+The per-match override is set through `PATCH /api/v1/tournaments/{id}/matches/{matchId}`
+(`{"raceTo": <int|null>}`, director+, audited, outside the open-scoring group) — a **new** route. The app
+does not call it: it sets neither layer, and the director sets both.
+
+What was exercised here:
+
+- **`sh tools/check-race.sh`** — 143 assertions, all passing, on a plain JVM: the resolution order (a
   match override over the division; the bracket's race over a local goal that was never claimed as an
-  override; a claimed override over both; an unnamed layer inferred from the two values; nothing
-  anywhere), the two provenance vocabularies, the discipline's label, and the payload's exact shape,
-  key order and marker. Each guard was broken deliberately, shown red, and restored — the rounds are
-  listed in `CONTINUE-HERE.md`.
-- **`sh build.sh`** — `out/score.apk` builds (81 KiB), `apksigner verify -v` reports v1, v2 and v3 all
-  verifying, badging reads `com.kevin.score` versionCode 5 / versionName 1.4 / minSdk 21 / targetSdk 34 /
-  one permission, and the new strings and classes are in the artifact (`aapt2 dump resources`,
-  `dexdump`).
-- **Not** exercised: the race line's wording, the override dialog's three buttons, the goal line under a
-  name, the payload arriving in `match_results` from a real submit — all of that renders on the
-  platform and needs the emulator against a server with the columns. `tools/verify-ui.sh` covers
-  standalone scoring only, so it would not exercise any of it either.
+  override; a claimed override over both; the server's own layer word, including the console's
+  `bracket`, its inverse case, and an unnamed layer inferred from the two values; nothing anywhere), the
+  two provenance vocabularies, the discipline's label, and the payload's exact shape, key order and
+  marker. Each guard was broken deliberately, shown red, and restored — the rounds are listed in
+  `CONTINUE-HERE.md`.
+- **`sh build.sh`** — `out/score.apk` builds (83,341 bytes), `apksigner verify -v` reports v1, v2 and v3
+  all verifying, badging reads `com.kevin.score` versionCode 5 / versionName 1.4 / minSdk 21 /
+  targetSdk 34 / one permission, and the new strings and classes are in the artifact
+  (`aapt2 dump resources`, `dexdump`).
+- **`sh tools/verify-ui.sh emulator-5554 emu2-`** — the standalone regression trace, against this build
+  installed on the AVD: every row up to the rename section matched the documented 1.4 trace (taps,
+  both boundaries, swipes, the mirrored far half's inverted direction, the centre-bar flip, three digits
+  to 100, reset from 100), then the run stopped with `uiautomator dump failed` at the rename dwell —
+  a harness/emulator dump failure rather than an app assertion, so the trace for this build is partial.
+  It drives standalone scoring only and never touches the race path.
+- **Not** exercised: the race line's wording in each state, the override dialog's three buttons, the goal
+  line under a name, and a payload with provenance arriving in `match_results` from a real submit — all
+  of that renders on the platform and needs a server with the columns.
 
 ### In the app, on the emulator
 

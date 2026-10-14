@@ -30,6 +30,10 @@ public final class RaceCheck {
                 "", 9, 7, false, 0, 0, 9, 9, Race.FROM_MATCH, 9);
         plan("the match carries none, the division does", "", 0, 7, false, 0, 0, 7, 7, Race.FROM_DIVISION, 7);
         plan("nobody set one: the discipline's default", "default", 25, 25, false, 0, 0, 25, 25, Race.FROM_DEFAULT, 25);
+        plan("the console's word for the same thing, in the server's place",
+                "bracket", 25, 25, false, 0, 0, 25, 25, Race.FROM_BRACKET, 25);
+        plan("a console word the server never sends does not corrupt the layer",
+                "override", 9, 7, false, 0, 0, 9, 9, Race.FROM_MATCH, 9);
 
         plan("the bracket's race wins over a local goal that is not an override",
                 "division", 7, 7, false, 5, 4, 7, 7, Race.FROM_DIVISION, 7);

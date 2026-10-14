@@ -109,9 +109,19 @@ final class Race {
     }
 
     /**
-     * Which layer of the bracket set the race. The server names it ({@code raceFrom}), which is the
-     * answer; when it names nothing the two values are compared instead, which reaches the same
-     * answer except for a game default - and a race the payloads do not carry at all is no race.
+     * Which layer of the bracket set the race.
+     *
+     * <p>Two different {@code raceFrom} fields exist in this system, on different objects, and this
+     * reads the server's one: the <b>match payload's</b> {@code raceFrom} names the layer that
+     * supplied its {@code raceTo} - {@code "match"}, {@code "division"} or {@code "default"}
+     * ({@code resolveRaceTo} in their {@code internal/api/games.go}, verified on branch
+     * {@code sheet-stack}). The console's <b>saved sheet record</b> uses the same field name with a
+     * different vocabulary ({@code bracket}/{@code local}/{@code override}); {@code "bracket"} is
+     * accepted here too, since it means the same thing this app means by it - the bracket supplied
+     * the race and the layer is not named.
+     *
+     * <p>Anything else is inferred from the two values, which reaches the same answer except for a
+     * game default - and a race the payloads do not carry at all is no race.
      */
     static int source(String matchRaceFrom, int matchRaceTo, int divisionRaceTo) {
         if (bracketRace(matchRaceTo, divisionRaceTo) == 0) {
@@ -125,6 +135,9 @@ final class Race {
         }
         if ("default".equals(matchRaceFrom)) {
             return FROM_DEFAULT;
+        }
+        if ("bracket".equals(matchRaceFrom)) {
+            return FROM_BRACKET;
         }
         return bracketSource(matchRaceTo, divisionRaceTo);
     }
