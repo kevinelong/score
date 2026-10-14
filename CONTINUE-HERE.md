@@ -112,25 +112,83 @@ What changed here:
 
 Three gaps the work left open, deliberately:
 
-1. **The wire between the two clients is still unproven end to end** — a real submit from the phone read
-   back as a stored payload. Attempted on 2026-10-14 and **blocked by a peer holding the port, so it was
-   not fought**: the AVD was up (`emulator-5554`), the reference server was rebuilt with the race code
-   (`bin/fifteenball-server.exe`, 14:08), the fixture DB was reachable, and the app installed — but
-   another process already owned `127.0.0.1:8093` (`listen tcp 127.0.0.1:8093: bind: Only one usage of
-   each socket address`), that instance serves the shared fixture DB with its own view of it, and its
-   matches read `raceFrom: "default"` because `divisions.race_to` is NULL in the fixture. Driving a
-   bracket-set race would have meant mutating a DB another agent is using, so the pass was abandoned
-   rather than forced. What the attempt *did* establish: `GET /tournaments/{id}/matches` from a live
-   server does carry `raceTo` and `raceFrom` in the shape this app reads.
-   State left as found: the `divisions.race_to=7` and `matches.state` values I set to stage the run were
-   both restored (`divisions.race_to` NULL, `m_t_race_001_1` back to `in_progress`), verified by
-   reading the DB back.
-   Re-doing it needs a free port (or the peer's server stopped) and a fixture with a **bracket-set**
-   race: `UPDATE divisions SET race_to=7 WHERE id='d_t_race_001'`, then open
-   `scoreboard://match?url=http%3A%2F%2F10.0.2.2%3A8093%2Flive.html%3Ft%3Dt_race_001` (no proxy needed —
-   the app derives `/api/v1` from the link's directory), tally home to the goal, submit, and read
-   `match_results.payload_json` back with `python -c "import sqlite3; …"` (the history endpoint is
-   session-gated, so the DB file is the cheap read).
+1. **The wire between the two clients is now proven end to end — closed 2026-10-14.** A real submit from
+   the phone, read back as a stored payload, on a **private copy** of the fixture DB
+   (`%TEMP%\scorerace-e2e.db`, `backup()` from `run/fifteenball.db`) with my own server on
+   `LISTEN_ADDR=127.0.0.1:8199` (never 8093, never `run/fifteenball.db`) and `OPEN_MATCH_EDITING=1`,
+   `UPDATE divisions SET race_to=7 WHERE id='d_t_race_001'` on that copy. Run on the committed build
+   (`out/score.apk`, 83,341 bytes, `7b3798cc…80564301`), the AVD on `emulator-5554`:
+
+   | Step | Observed |
+   | --- | --- |
+   | open `scoreboard://match?url=…10.0.2.2:8199/live.html?t=t_race_001` | `linked_status` "Thursday 9-Ball (race to 11) · table 5", names Casey/Drew, `TABLE 5` |
+   | the race line, untyped | **`Race to 7 · from the bracket`** — and `Race to 7` under each name |
+   | one point short | `home_goal` reads **`Race to 7 · match point`** |
+   | home to 7 | prompt "Match over · Casey has reached 7 · Casey 07 · Drew 00 · Submit the result, or keep editing if that was a mistake" |
+   | tap SUBMIT RESULT | `Recorded: Casey won 07–00`, action `CORRECT RESULT` |
+   | `match_results` v1, `m_t_race_001_1` | the payload below, **16 of 16 fields as the design doc documents them** |
+
+   ```json
+   {"score":"7-0","home":7,"away":0,"homeName":"Casey","awayName":"Drew","discipline":"9ball",
+    "app":"score-android","appVersion":"1.4","payloadVersion":2,"sheetKind":"tally",
+    "homeGoal":7,"awayGoal":7,"raceTo":7,"raceOrigin":"bracket","raceSource":"division",
+    "bracketRaceTo":7}
+   ```
+
+   The two properties the rename existed to establish were checked explicitly: **`raceOrigin` is the
+   origin key and `raceFrom` is absent**, and **`raceSource` names the layer (`division`) rather than an
+   origin**. Key order matches the doc's block exactly.
+   - A fifth state was rendered live on the way: the console-created match has no division, so its race
+     resolved to the game default and the bar read **`Race to 7 · the discipline's default, no target
+     set`**.
+   - The check discriminates, which is the point of doing it: the first pass read back
+     `"raceFrom":"bracket"` because the APK installed on the AVD predated `6d0cb97`. Reinstalling the
+     committed build produced the payload above. **A device read-back is the only thing that catches a
+     stale binary like that** — the JVM check asserted the same field correctly the whole time.
+   - Still device-only, and now the only ones left: the **local override** dialog's three buttons and the
+     race line in the `LOCAL OVERRIDE` / `set by hand` / `no race from the bracket` states (this run had a
+     bracket race to read, so it never needed the operator's path), and the long `LOCAL OVERRIDE …` line
+     wrapping in portrait, plus the partial `verify-ui.sh` trace (`uiautomator dump failed` at the rename
+     dwell).
+   - The earlier attempt's leftovers are recorded below for the record; the rule stands — **stage only on
+     a copy you make yourself, name it, never 8093 and never `run/fifteenball.db`.**
+
+   **What I staged, and where — asked and answered:** the file I touched was
+   **`C:/Users/kevin/score-ref/run/fifteenball.db`** (Kevin's clone DB, not a copy: that was the
+   mistake, and it is why this note now names the rule below). Exactly two rows were written, both by id
+   — `divisions.race_to=7 WHERE id='d_t_race_001'` and `matches.state='scheduled', started_at=NULL
+   WHERE id='m_t_race_001_1'` — and both were restored (`race_to=NULL`, `state='in_progress',
+   started_at=1767225600`) and read back to confirm. No INSERT ever ran from here, and nothing wrote to
+   `m_t_race_001_0` or to any `mch_*` id.
+   - **`race_to` column + `0018_race_to.sql` on that file: mine, indirectly.** The rebuilt server was
+     started with `DATABASE_PATH=…/run/fifteenball.db`, and its log shows it opened that path (`listening
+     on 127.0.0.1:8093 (db=C:/Users/kevin/score-ref/run/fifteenball.db)`) and ran its migrations *before*
+     the bind failed. So the benign migration is explained.
+   - **`m_t_race_001_0 → completed` and the third match `mch_e4475a79f43d1ee54797e150`: not mine.** My
+     SQL was UPDATE-only over those two named rows; an `mch_*` row cannot come from it, and the live
+     answers I read that day reported `m_t_race_001_0` as `in_progress`, i.e. that server was reading a
+     different file from the one showing `completed`.
+   - **The `e2e-fifteenball` / `e2e-proxy` services on 8131/8132 are not mine either** — they are not
+     from this session. My only long-lived process here was that single server binary, which exited 1; no
+     proxy was ever started (the link can point straight at the API, so `tools/dev-server.py` was skipped
+     on purpose).
+
+   **Rule for the next attempt: stage only on a copy you make yourself, name it in this file, and never
+   on 8093 or `run/fifteenball.db`.** Which is the substitution the redo below uses.
+
+   Re-doing it needs a free port and a **private copy** of the fixture DB, e.g.
+   `python -c "import sqlite3; sqlite3.connect('…/Temp/scorerace-e2e.db').close()"` via
+   `con.backup(dst)` from `run/fifteenball.db`, a server on `LISTEN_ADDR=127.0.0.1:8199
+   DATABASE_PATH=…/Temp/scorerace-e2e.db OPEN_MATCH_EDITING=1`, then
+   `UPDATE divisions SET race_to=7 WHERE id='d_t_race_001'` **on the copy**, and the link
+   `scoreboard://match?url=http%3A%2F%2F10.0.2.2%3A8199%2Flive.html%3Ft%3Dt_race_001` (no proxy needed —
+   the app derives `/api/v1` from the link's directory). Then read `linked_race` from a `drive-ui.py
+   dump` to see "Race to 7 · from the bracket", tally home to the goal, submit from the *Match over*
+   prompt, and read `match_results.payload_json` back with `python -c "import sqlite3; …"` (the history
+   endpoint is session-gated, so the DB file is the cheap read). Compare that payload against the design
+   doc's block **field by field**, including the two properties the rename existed to establish:
+   the origin key is **`raceOrigin`** (never `raceFrom`), and **`raceSource` is absent rather than
+   guessed** when no layer is named.
    - **No full device run of the race surfaces.** `tools/verify-ui.sh emulator-5554 emu2-` **was runnable**
    and traced this build: every row up to the rename section matched the documented 1.4 trace, then it
    stopped with `uiautomator dump failed` at the rename dwell (a harness/emulator dump failure, not an app
