@@ -468,6 +468,12 @@ placeholder squares for exactly that reason, which is worth fixing there one day
   `apksigner verify --print-certs`). Not live: the site is this fc clone served by nginx, hidden paths
   all 404 there, so the server block needs an exact-match exception before the file is reachable —
   and the pull on the box is a separate deploy step.
+  **Held by Kevin, 2026-10-15** — both server-side steps (this exception and the console pull) wait on him,
+  and the box is not reachable from here anyway: `codeonline.io` (`168.231.66.87`, `srv919932.hstgr.cloud`)
+  refuses every key of his from this workstation (`kevin`, `root`, `ubuntu`; ports 22 and 8001), and the
+  one box that does accept the key (`148.230.88.52`, `srv936626`) holds no `codeonline` or `15ball`
+  checkout. `dev.bblcht.com`'s host key has changed and it now resolves to a different VPS; the
+  `kevin.bblcht.com` ssh entry was corrected to the accepting host. Nothing was deployed.
 - The phone trace — the emulator has carried every verification so far; the phone build is a release
   behind, and 1.5 will be the first one worth putting on it.
 - The one-paragraph privacy policy.
