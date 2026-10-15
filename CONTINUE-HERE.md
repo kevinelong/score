@@ -10,8 +10,22 @@ Written 2026-10-12, last updated 2026-10-15, so nothing is lost across a restart
 
 ## Shipped and pushed
 
+**Android app 1.5** — `kevinelong/score` @ `05d9034`, `kevinelong/score-android` @ `d31c122`, release
+**v1.5** (the tag is the score-dist commit that shipped the bytes, as with v1.4). `score-release.apk`
+91,527 bytes, sha256 `25d570c283a7349ca5b5c04216d19cafadd27fc8609f3572ec0f24895682f1e1` — the release
+asset, the file committed to `score-dist` and the local build all hash-match. Verified after publishing,
+not before: `sh tools/check-release.sh --online` agrees with the asset and the notes, and `score-dist`'s
+`sh verify-release.sh` downloads the asset back and checks it against that README, the notes and the
+committed copy (both green).
+
+New in 1.5 — **the race comes from the bracket**, device-run before the release (below): the app reads
+the tournament's own target (a division's, a per-match override, or the discipline's default) instead of
+expecting one typed, the race line names the layer that supplied it, an operator's own goal is worded and
+recorded as the override it is, and the payload carries that provenance
+(`raceTo`/`raceOrigin`/`raceSource`/`bracketRaceTo`, plus `sheetKind: "tally"` and `payloadVersion: 2`).
+
 **Android app 1.4** — `kevinelong/score` @ `f1e8bd2`, `kevinelong/score-android` @ `1475f43`,
-release **v1.4**. `score-release.apk` 87,431 bytes, sha256
+release **v1.4** (previous). `score-release.apk` 87,431 bytes, sha256
 `6cf0081f43578850cd1482d54b95a132d96b6139d60b78d449fb34c51868e01e` (the release asset and the
 committed raw file both hash-match the local build).
 
@@ -59,7 +73,7 @@ Two things it established the first time it ran:
 `README.md` and `CONTINUE-HERE.md` are not read by the checker except for the artifact table, so keep
 that table exact when anything is rebuilt or re-shipped.
 
-## The race comes from the bracket — 2026-10-14, device-run 2026-10-15 (built 1.5, not released)
+## The race comes from the bracket — 2026-10-14, device-run 2026-10-15 (shipped as v1.5)
 
 Kevin's ask: **"bracket should pass the race into the scorer app."** The phone no longer has to be told
 its target by hand. The server (their side, in the clone) gained the race — `divisions.race_to` and an
@@ -198,13 +212,14 @@ Three gaps the work left open, deliberately:
      wrapping — all rendered on the AVD, with screenshots, a measured wrap and a probe file. Every
      `linked_race_*` string the app can draw has now been seen on a device, and the APK installed for
      the run was hashed back to the committed build.
-2. **Built as 1.5, not released — ready for Kevin to cut.** The version moved 1.4/5 → **1.5/6** in the
-   manifest, both APKs were rebuilt, the README artifact table and `score-dist` moved with them, and
-   `sh tools/check-release.sh --rebuild` proves the digests repeat. Local artifacts: `out/score.apk`
-   83,341 bytes `997ee376…ce875346`, `out/score-release.apk` 91,527 bytes `25d570c2…5682f1e1`.
-   **Nothing was published:** the latest release in `kevinelong/score-android` is still v1.4 (87,431
-   bytes, `6cf0081f…`), so `score-dist/verify-release.sh --online` reports the mismatch until that
-   release is cut — cutting it is the one step left, and it is Kevin's.
+2. **Shipped as 1.5 — released 2026-10-15.** The version moved 1.4/5 → **1.5/6** in the manifest, both
+   APKs were rebuilt, the README artifact table and `score-dist` moved with them, `sh
+   tools/check-release.sh --rebuild` proves the digests repeat, and the release itself is cut:
+   **v1.5** in `kevinelong/score-android`, one asset `score-release.apk` 91,527 bytes
+   `25d570c283a7349ca5b5c04216d19cafadd27fc8609f3572ec0f24895682f1e1`, notes carrying the same hash.
+   `sh tools/check-release.sh --online` and score-dist's `sh verify-release.sh` both go green against
+   the published asset (the second downloads it back and checks it against that README, the notes and
+   the committed copy), so the claim and the bytes agree in every place they are written down.
    - **The version lives in `app/AndroidManifest.xml`, not in `build.sh`.** aapt2's
      `--version-code`/`--version-name` inject a version only when the manifest declares none, which this
      one does; with `build.sh` bumped and the manifest still at 5/1.4 the APK badged 5/1.4, so both had
@@ -432,10 +447,8 @@ placeholder squares for exactly that reason, which is worth fixing there one day
 
 ## Still open, unchanged
 
-- **Cut the 1.5 release.** Everything up to it is done: the manifest says 1.5 / 6, both APKs are built,
-  the README artifact table and `score-dist` (README + committed APK) agree with the bytes,
-  `sh tools/check-release.sh --rebuild` is green, and `--online` will only go green once the release
-  exists. Nothing was published; the notes and the tag are Kevin's call.
+- **1.5 is out and verified** (see *Shipped and pushed*); the next upload needs a higher versionCode
+  again, and the version moves in `app/AndroidManifest.xml` and `build.sh` together.
 - Nothing is left in the race surfaces themselves — all of them are device-run (see above). The next
   thing worth doing there is on the server side, not here: a real tournament with a division race set,
   rather than a copy staged by hand.

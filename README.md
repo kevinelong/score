@@ -487,18 +487,15 @@ Decide these **before** the first public release, because they are effectively p
 - **Package name** - `com.kevin.score` today. Publishing fixes it; changing it later is a different
   app with no upgrade path, so choose the final name now (a domain you control, or the common
   `io.github.<you>.<app>` convention).
-- **versionCode / versionName** - every upload needs a higher versionCode. The published release is
-  **1.4**, `versionCode 5` / `versionName 1.4` - verified on the published APK itself:
-  `aapt2 dump badging score-release.apk` printed
-  `package: name='com.kevin.score' versionCode='5' versionName='1.4'`. The next version is built and
-  ready to ship as **1.5** / `versionCode 6` (`package: name='com.kevin.score' versionCode='6'
-  versionName='1.5'`), but it is **not released**: the latest release in `kevinelong/score-android` is
-  still v1.4, and `score-dist` carries the 1.5 bytes until that release is cut. The version lives in
-  `app/AndroidManifest.xml`, not in `build.sh` - aapt2's `--version-code`/`--version-name` only fill in
-  a manifest that declares none, so bumping the flags alone changes nothing (that was checked, not
-  assumed: `sh build.sh` with the flags at 6/1.5 still badged 5/1.4 until the manifest moved too).
-  (This paragraph used to say `3` / `1.2`, which is what 1.2 shipped as; a further upload must be
-  higher again.)
+- **versionCode / versionName** - every upload needs a higher versionCode. The latest release is
+  **1.5**, `versionCode 6` / `versionName 1.5` - verified on the published APK itself:
+  `aapt2 dump badging score-release.apk` prints
+  `package: name='com.kevin.score' versionCode='6' versionName='1.5'`. 1.4 (`versionCode 5`) is the one
+  before it. The version lives in `app/AndroidManifest.xml`, not in `build.sh`: aapt2's
+  `--version-code`/`--version-name` only fill in a manifest that declares none, so bumping the flags
+  alone changes nothing (checked, not assumed - `sh build.sh` with the flags at 6/1.5 still badged
+  5/1.4 until the manifest moved too). (This paragraph used to say `3` / `1.2`, which is what 1.2
+  shipped as; a further upload must be higher again.)
 - **Licence** - decided: **`FSL-1.1-MIT`**, described below and applied to both repositories. Still
   open: a one-paragraph privacy policy. The app collects nothing, has no third-party SDKs and no
   analytics; the only network use is linked match mode, which talks to the host of the link you opened
