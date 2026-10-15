@@ -1,0 +1,27 @@
+Probe: the race line's states, read off the device and the copy (2026-10-15)
+build: out/score.apk 83,341 bytes 997ee3765b2ef605a16003131e4c83c5f48a455347f46734744ee381ce875346 (versionCode 6 / 1.5)
+AVD: emulator-5554   server: 127.0.0.1:8199 on %TEMP%\scorerace-states.db   stand-in: tools/older-server.py on 8200
+
+== linked_race text, and the widget's painted line count, per screenshot ==
+race-09-bracket-line           box 71px tall, 1 painted band(s) [(1955, 1983)]
+                               'Race to 7 · from the bracket'
+race-11-local-override         box 113px tall, 2 painted band(s) [(1914, 1948), (1956, 1990)]
+                               "LOCAL OVERRIDE · Race to 5 – 7 · the bracket's race is 7 · tap to change"
+race-14-no-race-from-bracket   box 71px tall, 1 painted band(s) [(1955, 1990)]
+                               'Race to — · no race from the bracket — tap to set goals by hand'
+race-16-set-by-hand            box 113px tall, 2 painted band(s) [(1914, 1948), (1956, 1990)]
+                               'Race to 5 – — · set by hand — the bracket has no race · tap to change'
+race-17-match-override         box 71px tall, 1 painted band(s) [(1956, 1983)]
+                               "Race to 9 · the bracket's match override"
+race-18-discipline-default     box 71px tall, 1 painted band(s) [(1955, 1990)]
+                               "Race to 7 · the discipline's default, no target set"
+
+== the stored payload, read back from the copy's match_results ==
+res_fdd9abc3880acdda726380d1 m_t_race_001_1 v1  (1 fields)
+  keys: gamesWon
+  {"gamesWon": [11, 9]}
+res_155bdfc3a422657ddad3e7ec m_t_race_001_1 v2  (16 fields)
+  keys: score, home, away, homeName, awayName, discipline, app, appVersion, payloadVersion, sheetKind, homeGoal, awayGoal, raceTo, raceOrigin, raceSource, bracketRaceTo
+  {"score": "5-0", "home": 5, "away": 0, "homeName": "Casey", "awayName": "Drew", "discipline": "9ball", "app": "score-android", "appVersion": "1.5", "payloadVersion": 2, "sheetKind": "tally", "homeGoal": 5, "awayGoal": 7, "raceTo": 7, "raceOrigin": "override", "raceSource": "division", "bracketRaceTo": 7}
+
+raceFrom present: False   raceOrigin: 'override'   raceSource: 'division'

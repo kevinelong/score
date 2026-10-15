@@ -331,7 +331,9 @@ race at all, because the current server always resolves one — the `no race fro
 strings. The long `LOCAL OVERRIDE …` line and the `set by hand` line both **wrap in portrait**, measured
 (the widget is 71 px tall for a one-line state and 113 px for a wrapped one; the painted text bands count
 1 vs 2) rather than eyeballed from a screenshot. Screenshots and the full table are in
-`verify/race-0*`/`race-1*.png` and `CONTINUE-HERE.md`. The one surface still not device-run is the race
+`verify/race-0*`/`race-1*.png` and `CONTINUE-HERE.md`, and `verify/race-states-probe.txt` records the
+measurement per screenshot (box height, painted bands, the text that was on screen) alongside the stored
+payload read back from the copy. The one surface still not device-run is the race
 line on the **read-only fallback** (the 401 path), which draws the same `no race from the bracket` widget
 verified there.
 

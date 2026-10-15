@@ -262,10 +262,13 @@ the package. The same field set, the same key order and the same 16 keys as the 
 
 **Portrait wrapping, measured rather than eyeballed.** The same `linked_race` widget is 71 px tall for a
 one-line state and 113 px for the long ones, and the painted text bands inside the widget's bounds count
-1 vs 2: `race-09` 1 band (rows 22–50), `race-11` 2 bands (23–57 and 65–99), `race-14` 1 band, `race-16`
-2 bands — so the long `LOCAL OVERRIDE …` line and the `set by hand` line wrap in portrait and neither is
-clipped. A widget dump cannot show this: it reports the model text, which is the same string whether it
-is painted on one line or two.
+1 vs 2: `race-09` 1 band (screen rows 1955–1983), `race-11` 2 bands (1914–1948 and 1956–1990),
+`race-14` 1 band, `race-16` 2 bands, `race-17` and `race-18` 1 band each — so the long `LOCAL OVERRIDE …`
+line and the `set by hand` line wrap in portrait and neither is clipped. A widget dump cannot show this:
+it reports the model text, which is the same string whether it is painted on one line or two.
+**`verify/race-states-probe.txt`** is the probe: for each screenshot it records the box height, the band
+count and the band rows, then the `linked_race` text that was on screen, then the stored payload read
+back from the copy with the origin/layer fields called out.
 
 **The regression trace runs to the end now.** `sh tools/verify-ui.sh emulator-5554 emu-` against the 1.5
 build, 189.8 s, every section: the clean-state relaunch with the first-run hint and the space check
@@ -318,46 +321,52 @@ covers by hand.
 That last one is the point of doing them: the first attempt **passed**, because no row covered a server
 that names no layer. The row was added, the guard re-broken, and then it went red.
 
-## Waiting for review — a local branch in the clone (nothing pushed)
+## The clone: branches resolved, the print queue built — 2026-10-15
 
-Branch **`per-discipline-sheets`** in `score-ref/15ball-scoresheet`, three commits:
+**The review branch is resolved by landing, and the clone is down to `main` alone.** Everything the
+section that used to stand here asked about is on `main` and pushed:
 
-1. **14.1 paper sheet + rules PDF** — `docs/_scoresheet_141_draw.py`,
-   `docs/build_141_paper_sheet.py`, `docs/build_141_rules.py`, `docs/141-paper-sheet.pdf`,
-   `docs/141-rules.pdf`.
-2. **One score sheet per discipline** — `sheets.js`, `sheets.test.js`, changes to `app.js`,
-   `index.html`, `styles.css`, and `server/DECISIONS/021-per-game-sheets.md`.
-3. **Mark `*.pdf` binary** — a `.gitattributes` entry, so a text-classified PDF cannot gain CRLF on
-   checkout under `core.autocrlf` and break its xref offsets.
+- `per-discipline-sheets` (the 14.1 paper sheet + rules PDF, one sheet per discipline, `*.pdf binary`)
+  landed as `8753452` + `e0463a8`, reworked by `e01e9c7`/`101d7ee`. The branch was deleted after
+  `git cherry` showed two of its three commits patch-identical to `main` (the third's port is
+  `e0463a8`) and after checking that no file of it is missing from `main`. Its tip `d94b44c` stays in
+  `verify/per-discipline-sheets.bundle` here.
+- The six branches left behind in the clone — `docs-state-handoff`, `per-discipline-sheets-v2`,
+  `match-review-flag`, `sheet-stack`, `single-elim-merge`, `test-coverage-hardening` — each had
+  **zero** commits not in `main` (`git rev-list --count main..<b>`), so all six went with
+  `git branch -d`, reason recorded in the clone's README. The same refs still exist on `origin`;
+  deleting those is Kevin's call (`git push origin --delete <name>`).
+- `main` is `43f79f1` (the `raceOrigin` rename) on `2beaaa6` (sheet stack + bracket race) on
+  `f088168` (swipe): the "uncommitted race + sheet-payload work" this note used to warn about is
+  committed and pushed, so `git checkout .` in the clone no longer loses anything.
 
-Why it matters: clicking a bracket match used to open the paper-style sheet only for 15-Ball
-Rotation; every other discipline fell through to a generic games/points counter. Now the sheet is
-chosen by the tournament's game — 14.1 gets 14 balls × 8 racks with a RUNNING TOTAL and 75/100 goals,
-the games-won disciplines get a tally inside the same sheet chrome.
+**Decision 018's printed-sheet queue is built** (unbuilt since 2026-08-16). The per-match lifecycle was
+already in `bracket.js` (`sheetIssuedAt` / `sheetIssueVersion` / `sheetPlayersSnapshot`, `isMatchReady`
+/ `sheetIsStale` / `markSheetIssued`, and `markSheetStaleIfIssued` wired into `clearDownstream`); this
+round added the queue over it: `sheet-queue.js` (the pure state), `print.html` / `print.js` /
+`print.css` (the queue page and the paper sheets), a `Sheet` / amber `Reprint (v2)` control on each
+bracket card, `Print all Round 1 sheets (N)`, and the target in the snapshot (`sheetRaceTo`) so a race
+that changes voids the paper printed with the old one. Verified live in headless Chromium against the
+repo root, by driving it, not by reading: 9-ball gives the tally with four ±1 controls and **zero**
+jump controls (seven taps → 7 and the winner selected, an eighth tap still 7); 14.1 gives 8 racks × 14
+circles a side, RUNNING TOTAL, `FINAL MATCH TOTAL`, goals 75/100 with 100 pre-checked, and 3 marked
+balls with 1 foul → RACK TOTAL 2 / FINAL 2; the queue page recorded v1 on the four Round 1 sheets and,
+after a rename, printed a sheet whose captured markup carried
+`REPRINT - v3 - 2026-10-15T18:57:48.915Z`. Two gaps are recorded in the decision rather than hidden:
+the **table number prints blank** (this console has no match-to-table assignment; the server's
+`matches.table_ref` is where a pre-filled one would come from), and the **queue's printed/voided
+markers are per browser**. All 12 JS suites green (`node sheet-queue.test.js` new, 74 assertions;
+`app-render.test.js` 24, five of them new).
 
-The decision from here is one command either way, in the clone:
-publish — `git push -u origin per-discipline-sheets` (then the sheet and the rules PDF must go to
-GitHub Pages together, per the note below); discard — `git branch -D per-discipline-sheets`. `git
-checkout main` leaves the branch alone. Nothing was pushed, so nothing is live. The branch tip is
-`d94b44c` on top of `main` at `e3fa51f`.
-
-That clone is the only copy of those three commits, so they are also saved as a bundle inside this
-repository: **`verify/per-discipline-sheets.bundle`** (`git bundle verify` lists `main` at `e3fa51f`
-and `per-discipline-sheets` at `d94b44c`). Recover with
-`git fetch <this-repo>/verify/per-discipline-sheets.bundle per-discipline-sheets`.
-
-As of this note the clone's working tree also holds **uncommitted race + sheet-payload work**:
-`server/internal/api/divisions.go` and `matches.go` (the `race_to` columns, `raceTo`/`raceFrom`),
-a new `server/internal/api/games.go` and `race_to_test.go`, new `sheet-payload.js` +
-`sheet-payload.test.js` (the stored-sheet record this app's payload follows), `server/DECISIONS/023-`
-and edits across `app.js`/`live.js`/`index.html`/`styles.css` and the implementation docs. None of it is
-committed or pushed there, so `git checkout .` in that clone would lose it.
-
-**If the 14.1 work is published, the sheet and the rules PDF go together**: the sheet's QR points at
-`docs/141-rules.pdf`, which 404s until that file is on GitHub Pages.
-
-Two things I did not touch: the printed-sheet queue in decision 018 is still unbuilt, and
-`index.html`'s header links still point only at the 15-Ball sheets.
+**The 14.1 pairing is live, and I checked it by fetching.** Both PDFs are on `main` and published
+together: `https://kevinelong.github.io/15ball-scoresheet/docs/141-rules.pdf` and
+`…/docs/141-paper-sheet.pdf` each answer **200**, so the sheet's QR resolves. Pages serves this
+repository's `main` at the site root (`gh api repos/kevinelong/15ball-scoresheet/pages` →
+`source: {branch: "main", path: "/"}`), so "published" means committed to `main` and pushed — there is
+no separate publish step and no `gh-pages` branch. The pairing rule is written down where the sheet
+family lives: `server/DECISIONS/021-per-game-sheets.md`, section "Published PDFs — the sheet and its
+rules go together" (which also records that the **15-Ball** pair in the repo still carries placeholder
+QR squares, its build machine having had no `qrcode` — worth fixing there one day).
 
 ## Running when this note was written (all of it dies on restart)
 
