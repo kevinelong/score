@@ -5,7 +5,8 @@ Written 2026-10-12, last updated 2026-10-15, so nothing is lost across a restart
 - **`C:/Users/kevin/score`** — the Android scoreboard app (public: `kevinelong/score`,
   release repo `kevinelong/score-android`).
 - **`C:/Users/kevin/score-ref/15ball-scoresheet`** — a working clone of the tournament server and web
-  console (`kevinelong/15ball-scoresheet`). Contains uncommitted-until-now work; see below.
+  console (`kevinelong/15ball-scoresheet`). `main` only, and it is pushed: nothing is stranded there
+  in a branch or in the working tree (see "The clone" below).
 
 ## Shipped and pushed
 
@@ -373,14 +374,20 @@ QR squares, its build machine having had no `qrcode` — worth fixing there one 
 | what | command (from the stated directory) |
 | --- | --- |
 | the race device run (what to re-run) | the clone's `bin/fifteenball-server.exe` against the **private copy** `%TEMP%\scorerace-states.db`, `LISTEN_ADDR=127.0.0.1:8199 BASE_URL=http://127.0.0.1:8199 OPEN_MATCH_EDITING=1`, with `UPDATE divisions SET race_to=7 WHERE id='d_t_race_001'` on the copy; `python tools/older-server.py 8200` is the no-race stand-in for the other two states |
-| tournament server | from anywhere: `DATABASE_PATH=C:/Users/kevin/score-ref/run/fifteenball.db LISTEN_ADDR=127.0.0.1:8093 BASE_URL=http://127.0.0.1:8093 OPEN_MATCH_EDITING=1 C:/Users/kevin/score-ref/15ball-scoresheet/bin/fifteenball-server.exe` |
-| console proxy (mirrors nginx) | from `score`: `python tools/dev-server.py 8080` — serves `/15ball/api/` → `127.0.0.1:8093/api/` |
+| tournament server | from anywhere: `DATABASE_PATH=C:/Users/kevin/score-ref/run/fifteenball.db LISTEN_ADDR=127.0.0.1:8093 BASE_URL=http://127.0.0.1:8093 OPEN_MATCH_EDITING=1 C:/Users/kevin/score-ref/15ball-scoresheet/bin/fifteenball-server.exe` — **but see the DB note below: point it at a copy of your own** |
+| console proxy (mirrors nginx) | from `score`: `python tools/dev-server.py 8080` — serves `/15ball/api/` → `127.0.0.1:8093/api/` and `/15ball/…` from the clone |
 | the web app, for clicking through | from the clone: `python -m http.server 8123` → http://127.0.0.1:8123/index.html |
+| the printed-sheet queue | http://127.0.0.1:8094/15ball/print.html?t=&lt;tournamentId&gt; (a second `tools/dev-server.py 8094`, same clone) — or `print.html?t=…` on 8123 |
 | seed the fixtures | from `score-ref/15ball-scoresheet/server`: `DATABASE_PATH=C:/Users/kevin/score-ref/run/fifteenball.db <toolchain>/go/bin/go.exe run ./tmp-fixture` — seeds the 15-ball tournament plus `t_race_001` (9-ball, two live matches, tables 4 and 5) and `t_141_001` (14.1, Iris vs Jonah, table 1) |
 
-The 8093 rows are the documented local stack (`ScoreConsole` was running it on 2026-10-15); the race run
-deliberately used neither that port nor that DB. Drop `OPEN_MATCH_EDITING=1` to exercise the app's
-read-only path.
+The 8093 row is the documented local stack. **It writes on start** (migrations), so on 2026-10-15 I ran
+it on a copy of Kevin's DB instead of on the file itself — `%TEMP%\sheetstack-demo-8093.db`, made with
+`sqlite3.connect(src,'file:…?mode=ro').backup(dst)` from `run/fifteenball.db`, with the server's own log
+line confirming which file it opened (`listening on 127.0.0.1:8093 (db=C:/Users/kevin/AppData/Local/Temp/sheetstack-demo-8093.db)`).
+That is the incident rule stated as an instruction: **stage only on a copy you make yourself, name it,
+and never on `run/fifteenball.db`.** `run/fifteenball.db` was opened read-only for the copy and not
+otherwise touched. The race run deliberately used neither that port nor that DB. Drop
+`OPEN_MATCH_EDITING=1` to exercise the app's read-only path.
 
 `bin/` and `server/tmp-fixture/` are mine and untracked; the fixture's source is copied to
 `verify/tmp-fixture-main.go` here so a `git clean` in the clone cannot destroy it. The AVD
@@ -401,9 +408,10 @@ sh tools/verify-ui.sh emulator-5554 emu-      # the standalone regression trace
 # the distribution repository (and what a stranger downloads)
 (cd ../score-dist && sh verify-release.sh)
 
-# the web work, in the clone
-node sheets.test.js && node bracket.test.js && node roster.test.js \
-  && node tables.test.js && node migration.test.js
+# the web work, in the clone — every suite, the way 2026-10-15 ran them
+for f in *.test.js; do node "$f" || echo "FAILED $f"; done
+# (12 suites: bracket, sheets, sheet-payload, sheet-queue, roster, tables, migration,
+#  app-render, live-console, review-flags, overlay-bracket, api-client)
 python docs/build_141_paper_sheet.py && python docs/build_141_rules.py   # 14.1 sheet + rules
 ```
 
@@ -423,7 +431,16 @@ placeholder squares for exactly that reason, which is worth fixing there one day
   `Race to — · no race from the bracket …` widget verified at `race-14`, and the view-only board itself
   was verified in 1.4. Cheap to add on the copy named above (a stand-in that answers 401 on the scoring
   reads and 200 on `/public/tournaments/{id}`).
-- Publish or discard the branch above.
+- The clone's seven leftover branches are gone locally (see the clone section); the same six refs still
+  exist on `origin` and `git push origin --delete <name>` is Kevin's call. `main` is the only local
+  branch, at `43f79f1` plus this round's commit.
+- Decision 018's two recorded gaps (the clone section above): a **pre-filled table number** on a printed
+  sheet needs a match↔table assignment, which this console does not have (the server's
+  `matches.table_ref` is the data); and the queue's **printed/voided markers are per browser**. Neither
+  is a stub — they are written down in `DECISIONS/018` under "The gaps, marked".
+- Printing on **real paper** has not been done: the sheets were checked in a browser and what
+  `window.print()` receives was captured and read, but no printer was involved, so layout and page
+  breaks on paper are unverified.
 - `assetlinks.json` on `codeonline.io`, so a scoring link opens the installed app instead of a chooser.
   **Drafted and committed** (`kevinelong/fc` @ `c62a078`, `.well-known/assetlinks.json`, package
   `com.kevin.score` + the release cert's SHA-256 `3B:72:3D:B8:…:F1:29`, read off the shipped APK with
