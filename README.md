@@ -8,8 +8,8 @@ is what makes a published hash worth anything:
 
 | Artifact | Size | Purpose |
 | --- | --- | --- |
-| `out/score.apk` | 83,341 bytes, `7b3798cc…80564301` | debug-signed, for the dev loop (`sh build.sh`); signed with the git-ignored `tools/debug.keystore`, so this hash is this machine's build of the current source |
-| `out/score-release.apk` | 87,431 bytes, `6cf0081f…c51868e01e` | release-signed with the project's own 4096-bit key (`SIGN=release sh build.sh`) |
+| `out/score.apk` | 83,341 bytes, `997ee376…ce875346` | debug-signed, for the dev loop (`sh build.sh`); signed with the git-ignored `tools/debug.keystore`, so this hash is this machine's build of the current source |
+| `out/score-release.apk` | 91,527 bytes, `25d570c2…5682f1e1` | release-signed with the project's own 4096-bit key (`SIGN=release sh build.sh`) |
 
 `sh tools/check-release.sh` re-reads both artifacts and fails if the sizes, hashes,
 versions or permissions here disagree with the bytes; `--rebuild` proves the digests
@@ -357,7 +357,8 @@ tools/probe_screens.py                       pixel-probe screenshots (panel colo
 tools/make-release-key.sh                    one-off: the 4096-bit release signing key
 tools/check-release.sh                       the built APKs against every documented size, hash, version and permission
 tools/check-race.sh                          the race resolution and the payload, on a plain JVM (no device)
-tools/race-check/RaceCheck.java              the assertions check-race.sh runs (143 of them)
+tools/older-server.py                        stand-in for a server that sends no race at all (the two no-bracket states)
+tools/race-check/RaceCheck.java              the assertions check-race.sh runs (149 of them)
 tools/bootstrap-go.sh                        portable Go, for the reference tournament server
 verify/                                      phone/AVD screenshots from the current build (probe inputs)
 LICENSE                                      FSL-1.1-MIT (source-available; MIT after two years)
@@ -486,11 +487,18 @@ Decide these **before** the first public release, because they are effectively p
 - **Package name** - `com.kevin.score` today. Publishing fixes it; changing it later is a different
   app with no upgrade path, so choose the final name now (a domain you control, or the common
   `io.github.<you>.<app>` convention).
-- **versionCode / versionName** - every upload needs a higher versionCode. As shipped, **1.4** is
-  `versionCode 5` / `versionName 1.4` - verified on the published APK itself:
-  `aapt2 dump badging score-release.apk` prints
-  `package: name='com.kevin.score' versionCode='5' versionName='1.4'`. (This paragraph used to say
-  `3` / `1.2`, which is what 1.2 shipped as; a further upload must be higher again.)
+- **versionCode / versionName** - every upload needs a higher versionCode. The published release is
+  **1.4**, `versionCode 5` / `versionName 1.4` - verified on the published APK itself:
+  `aapt2 dump badging score-release.apk` printed
+  `package: name='com.kevin.score' versionCode='5' versionName='1.4'`. The next version is built and
+  ready to ship as **1.5** / `versionCode 6` (`package: name='com.kevin.score' versionCode='6'
+  versionName='1.5'`), but it is **not released**: the latest release in `kevinelong/score-android` is
+  still v1.4, and `score-dist` carries the 1.5 bytes until that release is cut. The version lives in
+  `app/AndroidManifest.xml`, not in `build.sh` - aapt2's `--version-code`/`--version-name` only fill in
+  a manifest that declares none, so bumping the flags alone changes nothing (that was checked, not
+  assumed: `sh build.sh` with the flags at 6/1.5 still badged 5/1.4 until the manifest moved too).
+  (This paragraph used to say `3` / `1.2`, which is what 1.2 shipped as; a further upload must be
+  higher again.)
 - **Licence** - decided: **`FSL-1.1-MIT`**, described below and applied to both repositories. Still
   open: a one-paragraph privacy policy. The app collects nothing, has no third-party SDKs and no
   analytics; the only network use is linked match mode, which talks to the host of the link you opened
@@ -560,15 +568,17 @@ The race resolution and the result payload are **pure** (`Race.java`, `ResultPay
 no `org.json`), so the one part of this that does not need a device is checked on a plain JVM:
 
 ```sh
-sh tools/check-race.sh     # 143 assertions: the resolution order, the provenance, the payload's shape
+sh tools/check-race.sh     # 149 assertions: the resolution order, the provenance, the payload's shape
 ```
 
 It asserts that a per-match override beats the division's target, that the bracket's race beats a local
 goal that was never claimed as an override, that a claimed override beats both, what each case records
 as the race's provenance and which label the discipline implies — and it fails loudly rather than
 silently, which was checked by breaking each guard in turn (the rounds are listed in
-`CONTINUE-HERE.md`). Everything a person *looks* at — the race line's wording, the override dialog, the
-goal line under a name — renders on the platform and is listed there as device-only.
+`CONTINUE-HERE.md`). Everything a person *looks* at — the race line's wording in every state, the
+override dialog's buttons, the goal line under a name — renders on the platform rather than in that
+check, and every one of those surfaces has now been traced on the emulator, with the screenshots and the
+measured portrait wrap listed in `CONTINUE-HERE.md` and captured in `verify/`.
 
 ## Licence
 

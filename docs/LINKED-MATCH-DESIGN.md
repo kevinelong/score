@@ -92,7 +92,7 @@ alongside it. A result from a tournament whose division carries a race of 7, sco
   "home": 4, "away": 7,
   "homeName": "Ada", "awayName": "Bo",
   "discipline": "9ball",
-  "app": "score-android", "appVersion": "1.4",
+  "app": "score-android", "appVersion": "1.5",
   "payloadVersion": 2, "sheetKind": "tally",
   "homeGoal": 7, "awayGoal": 7, "raceTo": 7,
   "raceOrigin": "bracket", "raceSource": "division", "bracketRaceTo": 7
@@ -321,11 +321,19 @@ That read-back earned its keep immediately: the first pass stored `"raceFrom": "
 installed on the AVD predated the rename — the old key silently reading as a *layer* word in a field that
 means provenance, which no JVM assertion could have caught.
 
-Still device-only, and the only gaps left: the **local override** dialog's three buttons and the race line
-in its `LOCAL OVERRIDE` / `set by hand` / `no race from the bracket` states (the wire run had a bracket
-race to read, so it never needed the operator's path), and the long `LOCAL OVERRIDE …` line wrapping in
-portrait — plus `tools/verify-ui.sh`, whose standalone trace is partial here (`uiautomator dump failed` at
-the rename dwell).
+**Device-run 2026-10-15 (closed).** Every race line the app can draw has now been rendered on the AVD:
+the bracket's race and the division's target on 2026-10-14; then, on the 1.5 build, the **override
+dialog's three buttons** (`BRACKET'S RACE`, `CANCEL`, `OK`), the `LOCAL OVERRIDE` state, its goal prompt
+and its stored payload, the **match override** (`Race to 9 · the bracket's match override`) and the
+**discipline's default**; and — against `tools/older-server.py`, a stand-in for a server that sends no
+race at all, because the current server always resolves one — the `no race from the bracket` and
+`set by hand` states, including the two-button dialog that state gets. That is all six `linked_race_*`
+strings. The long `LOCAL OVERRIDE …` line and the `set by hand` line both **wrap in portrait**, measured
+(the widget is 71 px tall for a one-line state and 113 px for a wrapped one; the painted text bands count
+1 vs 2) rather than eyeballed from a screenshot. Screenshots and the full table are in
+`verify/race-0*`/`race-1*.png` and `CONTINUE-HERE.md`. The one surface still not device-run is the race
+line on the **read-only fallback** (the 401 path), which draws the same `no race from the bracket` widget
+verified there.
 
 What names the app reads and writes was checked against the landed server rather than trusted: on branch
 `sheet-stack` (commit `2beaaa6`), `resolveRaceTo` in their `internal/api/games.go` returns the layer as
@@ -344,27 +352,33 @@ does not call it: it sets neither layer, and the director sets both.
 
 What was exercised here:
 
-- **`sh tools/check-race.sh`** — 143 assertions, all passing, on a plain JVM: the resolution order (a
+- **`sh tools/check-race.sh`** — 149 assertions, all passing, on a plain JVM: the resolution order (a
   match override over the division; the bracket's race over a local goal that was never claimed as an
   override; a claimed override over both; the server's own layer word, including the console's
   `bracket`, its inverse case, and an unnamed layer inferred from the two values; nothing anywhere), the
   two provenance vocabularies, the discipline's label, and the payload's exact shape, key order and
   marker. Each guard was broken deliberately, shown red, and restored — the rounds are listed in
   `CONTINUE-HERE.md`.
-- **`sh build.sh`** — `out/score.apk` builds (83,341 bytes), `apksigner verify -v` reports v1, v2 and v3
-  all verifying, badging reads `com.kevin.score` versionCode 5 / versionName 1.4 / minSdk 21 /
-  targetSdk 34 / one permission, and the new strings and classes are in the artifact
-  (`aapt2 dump resources`, `dexdump`).
-- **`sh tools/verify-ui.sh emulator-5554 emu2-`** — the standalone regression trace, against this build
-  installed on the AVD: every row up to the rename section matched the documented 1.4 trace (taps,
-  both boundaries, swipes, the mirrored far half's inverted direction, the centre-bar flip, three digits
-  to 100, reset from 100), then the run stopped with `uiautomator dump failed` at the rename dwell —
-  a harness/emulator dump failure rather than an app assertion, so the trace for this build is partial.
-  It drives standalone scoring only and never touches the race path.
-- **Not** exercised: the override dialog's three buttons, the race line in its three operator-path states,
-  and the long line's portrait wrapping — the run above had a bracket race to read, so it never needed the
-  operator's path (see the paragraph at the top of this section, which also records what the wire test
-  proved).
+- **`sh build.sh`** — `out/score.apk` builds (83,341 bytes, `997ee376…ce875346`), `apksigner verify -v`
+  reports v1, v2 and v3 all verifying, badging reads `com.kevin.score` versionCode **6** / versionName
+  **1.5** / minSdk 21 / targetSdk 34 / one permission, and the new strings and classes are in the
+  artifact (`aapt2 dump resources`, `dexdump`). The bump is in `app/AndroidManifest.xml`: aapt2's
+  `--version-code`/`--version-name` only fill in a manifest that declares none, which this one does, so
+  flagging 6/1.5 in `build.sh` alone changed nothing until the manifest moved too.
+- **`sh tools/verify-ui.sh emulator-5554 emu-`** — the standalone regression trace, against the 1.5 build
+  on the AVD, **start to finish** (189.8 s, nothing skipped): relaunch from a clean state with the
+  first-run hint and the space check (`uiautomator root [0,0][1080,2340]` against a 1080x2340
+  framebuffer — the rotated-display guard), `00`/`00`, the tap / plus / minus / reset rows, both swipe
+  directions on each side with the far half's sense inverted, a swipe starting on a `+` tile counting
+  once, the centre-bar flip and back, three digits to 100 and reset from 100, the rename dwell (300 ms
+  below it does nothing, 1500 ms opens the dialog, `HAWKS` saves), landscape and back, and an empty
+  crash log. The 2026-10-14 run had stopped at `uiautomator dump failed` on that same dwell — a
+  harness/emulator dump flake rather than an app assertion, as it is not reproducible here: the identical
+  dwell passes, same script, same AVD, same binary. It drives standalone scoring only; the race surfaces
+  are covered by the runs above.
+- **The race surfaces, by hand** — see the paragraph at the top of this section, and the table in
+  `CONTINUE-HERE.md`: the five race-line states, both override dialogs, the goal line under a name, the
+  goal prompt at a local goal, and a submit read back field by field.
 
 ### In the app, on the emulator
 

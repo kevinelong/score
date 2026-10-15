@@ -1,6 +1,6 @@
 # Score — state for a restart
 
-Written 2026-10-12, last updated 2026-10-14, so nothing is lost across a restart. Two repositories:
+Written 2026-10-12, last updated 2026-10-15, so nothing is lost across a restart. Two repositories:
 
 - **`C:/Users/kevin/score`** — the Android scoreboard app (public: `kevinelong/score`,
   release repo `kevinelong/score-android`).
@@ -58,7 +58,7 @@ Two things it established the first time it ran:
 `README.md` and `CONTINUE-HERE.md` are not read by the checker except for the artifact table, so keep
 that table exact when anything is rebuilt or re-shipped.
 
-## The race comes from the bracket — 2026-10-14 (not shipped, not device-run)
+## The race comes from the bracket — 2026-10-14, device-run 2026-10-15 (built 1.5, not released)
 
 Kevin's ask: **"bracket should pass the race into the scorer app."** The phone no longer has to be told
 its target by hand. The server (their side, in the clone) gained the race — `divisions.race_to` and an
@@ -84,7 +84,7 @@ What changed here:
   `payloadVersion: 2`; `app` stays `score-android` and `appVersion` became the app build read from the
   package. The endpoint, the `Idempotency-Key` and the read-only fallback are untouched, and no bracket
   card gained a score.
-- **`tools/check-race.sh` + `tools/race-check/RaceCheck.java`** (new): 143 assertions on a plain JVM.
+- **`tools/check-race.sh` + `tools/race-check/RaceCheck.java`** (new): 149 assertions on a plain JVM.
 
 **Reconciled with the server side (branch `sheet-stack`, commit `2beaaa6`), which landed mid-work:**
 
@@ -145,11 +145,12 @@ Three gaps the work left open, deliberately:
      `"raceFrom":"bracket"` because the APK installed on the AVD predated `6d0cb97`. Reinstalling the
      committed build produced the payload above. **A device read-back is the only thing that catches a
      stale binary like that** — the JVM check asserted the same field correctly the whole time.
-   - Still device-only, and now the only ones left: the **local override** dialog's three buttons and the
-     race line in the `LOCAL OVERRIDE` / `set by hand` / `no race from the bracket` states (this run had a
-     bracket race to read, so it never needed the operator's path), and the long `LOCAL OVERRIDE …` line
-     wrapping in portrait, plus the partial `verify-ui.sh` trace (`uiautomator dump failed` at the rename
-     dwell).
+   - Still device-only after that run, and closed on 2026-10-15: the **local override** dialog's three
+     buttons, the race line in the `LOCAL OVERRIDE` / `set by hand` / `no race from the bracket` states
+     (this run had a bracket race to read, so it never needed the operator's path), the long
+     `LOCAL OVERRIDE …` line wrapping in portrait, and the partial `verify-ui.sh` trace
+     (`uiautomator dump failed` at the rename dwell) — see the section below for all four, including
+     the trace that now runs to the end.
    - The earlier attempt's leftovers are recorded below for the record; the rule stands — **stage only on
      a copy you make yourself, name it, never 8093 and never `run/fifteenball.db`.**
 
@@ -189,19 +190,111 @@ Three gaps the work left open, deliberately:
    doc's block **field by field**, including the two properties the rename existed to establish:
    the origin key is **`raceOrigin`** (never `raceFrom`), and **`raceSource` is absent rather than
    guessed** when no layer is named.
-   - **No full device run of the race surfaces.** `tools/verify-ui.sh emulator-5554 emu2-` **was runnable**
-   and traced this build: every row up to the rename section matched the documented 1.4 trace, then it
-   stopped with `uiautomator dump failed` at the rename dwell (a harness/emulator dump failure, not an app
-   assertion), so that trace is partial — and it drives standalone scoring only, never the race. What only
-   a device can confirm: the race line's wording in each of the five states, the override dialog's three
-   buttons, the goal line under a name, and the long `LOCAL OVERRIDE …` line wrapping in portrait.
-2. **Not shipped.** The version is still 1.4 / versionCode 5 and only the debug APK was rebuilt
-   (`out/score.apk` 83,341 bytes, `7b3798cc…80564301`); `out/score-release.apk` is left as the shipped
-   1.4 bytes so `tools/check-release.sh` still agrees with `score-dist`. Shipping this needs the bump
-   (1.5 / 6), both APKs rebuilt, the README table and `score-dist` updated together, and a release cut.
-3. **`appVersion` is now a string** (`"1.4"`, the app build) rather than the int the payload used to
+   - **The race surfaces are device-run now — closed 2026-10-15.** See *The operator-path race states,
+     on the device* below: the override dialog's three buttons, the race line in its `LOCAL OVERRIDE` /
+     `set by hand` / `no race from the bracket` states, the `match override` and `discipline default`
+     states, the goal line under a name, and the long line's portrait wrapping all rendered on the AVD,
+     with screenshots and a measured wrap — so all six `linked_race_*` strings have now been seen on a
+     device. What is still *not* device-run: the race line on the read-only fallback (the 401 path),
+     which draws the same `no race from the bracket` widget verified at `race-14`.
+2. **Built as 1.5, not released — ready for Kevin to cut.** The version moved 1.4/5 → **1.5/6** in the
+   manifest, both APKs were rebuilt, the README artifact table and `score-dist` moved with them, and
+   `sh tools/check-release.sh --rebuild` proves the digests repeat. Local artifacts: `out/score.apk`
+   83,341 bytes `997ee376…ce875346`, `out/score-release.apk` 91,527 bytes `25d570c2…5682f1e1`.
+   **Nothing was published:** the latest release in `kevinelong/score-android` is still v1.4 (87,431
+   bytes, `6cf0081f…`), so `score-dist/verify-release.sh --online` reports the mismatch until that
+   release is cut — cutting it is the one step left, and it is Kevin's.
+   - **The version lives in `app/AndroidManifest.xml`, not in `build.sh`.** aapt2's
+     `--version-code`/`--version-name` inject a version only when the manifest declares none, which this
+     one does; with `build.sh` bumped and the manifest still at 5/1.4 the APK badged 5/1.4, so both had
+     to move. `tools/check-release.sh` compares `build.sh`'s flags with the APK's own badging, so they
+     move together or the check goes red.
+3. **`appVersion` is now a string** (`"1.5"`, the app build) rather than the int the payload used to
    carry, because that is the shape the console's record reads; the payload's own revision moved to
    `payloadVersion`. Any consumer reading the old int should read `payloadVersion` instead.
+
+## The operator-path race states, on the device — 2026-10-15
+
+The states the 2026-10-14 wire run never needed (it had a bracket race to read, so it never took the
+operator's path), rendered on the AVD `emulator-5554` and captured under `verify/race-0*`/`race-1*.png`.
+The installed build is the 1.5 debug APK (`out/score.apk`, 83,341 bytes, `997ee376…ce875346`).
+
+**Two of the three states cannot be produced by the current server at all**, which is exactly why they
+had never rendered: `resolveRaceTo` always sends a number, so the board always has a bracket race to
+read. "no race from the bracket" and "set by hand" are *defined* by a server that sends none, so they
+need a stand-in for the old one: **`tools/older-server.py`** (new) serves the documented shape with
+`raceTo`/`raceFrom` absent from the match and `raceTo` absent from the division, logs every request it
+answers, and is pointed at with the same `scoreboard://match?url=…` link on port **8200**.
+
+| State | Stimulus | What the device showed |
+| --- | --- | --- |
+| the bracket's race | private DB copy, server on `8199`, `divisions.race_to=7` | `linked_race` **`Race to 7 · from the bracket`**, `Race to 7` under each name, `TABLE 5`, `Casey`/`Drew` (`race-09-bracket-line.png`) |
+| the override dialog | tap the race line, bracket race present | title **`Override the race`**, message **`The bracket's race is Race to 7. Type a goal to score this table differently; a side left blank has none.`**, two fields prefilled `7`/`7`, and **three** buttons: **`BRACKET'S RACE`** (neutral), `CANCEL`, `OK` (`race-10-override-dialog.png`) |
+| `LOCAL OVERRIDE` | typed `5` in the home field, `OK` (away still `7`) | **`LOCAL OVERRIDE · Race to 5 – 7 · the bracket's race is 7 · tap to change`**, and under the names `Race to 5 · local override` / `Race to 7 · local override` (`race-11-local-override.png`) |
+| the goal prompt at the local goal | five taps on the home score | `Match over` / `Casey has reached 5.` / `Casey 05 · Drew 00`, with **`SUBMIT RESULT`** and `KEEP EDITING` (`race-12-goal-prompt-local.png`) |
+| the submit | `SUBMIT RESULT` | `Recorded: Casey won 05–00`, action `CORRECT RESULT`, race line still `LOCAL OVERRIDE …` (`race-13-submitted-local.png`) |
+| `no race from the bracket` | the stand-in server on 8200 | **`Race to — · no race from the bracket — tap to set goals by hand`**, and no goal line under either name (`race-14-no-race-from-bracket.png`) |
+| the dialog with no bracket race | tap the race line there | title **`Goals`**, message **`The bracket has no race for this match. A side left blank has no goal.`**, **two** buttons (`CANCEL`, `OK`) — no `BRACKET'S RACE` to drop back to, and empty fields hinting the names (`race-15-goals-dialog-no-race.png`) |
+| `set by hand` | typed `5` in the home field, `OK` | **`Race to 5 – — · set by hand — the bracket has no race · tap to change`**, `Race to 5 · local override` under the home name, no goal under the away name (`race-16-set-by-hand.png`) |
+| the bracket's match override | `UPDATE matches SET race_to=9` on the copy, for the scheduled match with no division (Avery vs Casey) | **`Race to 9 · the bracket's match override`**, `Race to 9` under each name, status `… · scheduled` (`race-17-match-override.png`) |
+| the discipline's default | `race_to` back to NULL for that match, so it resolves to the game's own 7 | **`Race to 7 · the discipline's default, no target set`** (`race-18-discipline-default.png`) |
+
+Those last two close the list: with the bracket's race and the division's target from 2026-10-14, **every
+one of the six `linked_race_*` strings has now been rendered on a device**, five of them on the 1.5 build.
+The only race surface never device-run is the race line on the **read-only fallback** (the 401 path), whose
+payload carries no race at all — it draws the same `no race from the bracket` widget verified at
+`race-14`, and the view-only board itself was verified in 1.4 (`race-06-view-only.png`).
+
+The stored payload, read back from the copy's `match_results` (v2 of `m_t_race_001_1`):
+
+```json
+{"score":"5-0","home":5,"away":0,"homeName":"Casey","awayName":"Drew","discipline":"9ball",
+ "app":"score-android","appVersion":"1.5","payloadVersion":2,"sheetKind":"tally",
+ "homeGoal":5,"awayGoal":7,"raceTo":7,"raceOrigin":"override","raceSource":"division",
+ "bracketRaceTo":7}
+```
+
+That is the operator's path on the wire, and it holds the two properties the rename exists for:
+**`raceOrigin` is `override`** (the origin word, not the bracket's) and **`raceFrom` is absent**;
+`raceSource` still names the *layer* the bracket's race came from (`division`), never an origin; the two
+goals differ (5 against 7) and `raceTo` is the harder of them; `appVersion` reads `"1.5"`, straight off
+the package. The same field set, the same key order and the same 16 keys as the block in the design doc.
+
+**Portrait wrapping, measured rather than eyeballed.** The same `linked_race` widget is 71 px tall for a
+one-line state and 113 px for the long ones, and the painted text bands inside the widget's bounds count
+1 vs 2: `race-09` 1 band (rows 22–50), `race-11` 2 bands (23–57 and 65–99), `race-14` 1 band, `race-16`
+2 bands — so the long `LOCAL OVERRIDE …` line and the `set by hand` line wrap in portrait and neither is
+clipped. A widget dump cannot show this: it reports the model text, which is the same string whether it
+is painted on one line or two.
+
+**The regression trace runs to the end now.** `sh tools/verify-ui.sh emulator-5554 emu-` against the 1.5
+build, 189.8 s, every section: the clean-state relaunch with the first-run hint and the space check
+(`uiautomator root [0,0][1080,2340]` vs a 1080x2340 framebuffer), `00`/`00`, the tap / plus / minus /
+reset rows, both swipe directions per side with the far half's sense inverted, a swipe starting on a `+`
+tile counting exactly once, the centre-bar flip and back, three digits to 100 and reset from 100, the
+rename dwell (300 ms below it does nothing; 1500 ms opens the dialog and `HAWKS` saves), landscape and
+back, and an empty crash log — no `FATAL EXCEPTION` from `com.kevin.score`. **The `uiautomator dump
+failed` dwell does not reproduce**: it was a harness/emulator dump flake, not a step the script cannot
+pass, since the identical dwell (and every row after it) is in this run, with the same script, AVD and
+binary. The trace screenshots in `verify/emu-*.png` are from this run, so they match the current build.
+The harness drives standalone scoring only; it never touches the race path, which is what the table above
+covers by hand.
+
+**What was staged, and where** — the rule recorded after the 2026-10-14 incident, followed this time:
+
+- The DB was **a copy I made myself**: **`%TEMP%\scorerace-states.db`**, via
+  `sqlite3.connect(src).backup(dst)` from `C:/Users/kevin/score-ref/run/fifteenball.db`. Every write went
+  to the copy; the fixture file was never opened for writing and never passed as `DATABASE_PATH`.
+- **Port 8199**, never 8093 — `ScoreConsole` holds 8093 / 8080 / 8094 / 8123 in the clone and confirmed
+  8199 was free. The stand-in for the no-race states is on **8200**.
+- On the copy: `UPDATE divisions SET race_to=7 WHERE id='d_t_race_001'` for the ordinary and local-override
+  states, `UPDATE matches SET race_to=9 WHERE id='mch_e4475a79f43d1ee54797e150'` and then back to NULL for
+  the match-override and default states, plus the app's own submit to that copy. Nothing else — the fixture
+  file itself was never written.
+- The server binary is the clone's existing `bin/fifteenball-server.exe` (untracked Kevin tooling, built
+  2026-10-14): **started, not rebuilt**, so a peer's live run on it was not disturbed. That it carries the
+  race columns was read off its own JSON (`"raceTo": 7, "raceFrom": "division"` on the match) rather than
+  assumed from the build date.
 
 **Falsification rounds** (each guard broken, shown red, restored) — run against the final code with
 `sh tools/check-race.sh`:
@@ -270,12 +363,15 @@ Two things I did not touch: the printed-sheet queue in decision 018 is still unb
 
 | what | command (from the stated directory) |
 | --- | --- |
+| the race device run (what to re-run) | the clone's `bin/fifteenball-server.exe` against the **private copy** `%TEMP%\scorerace-states.db`, `LISTEN_ADDR=127.0.0.1:8199 BASE_URL=http://127.0.0.1:8199 OPEN_MATCH_EDITING=1`, with `UPDATE divisions SET race_to=7 WHERE id='d_t_race_001'` on the copy; `python tools/older-server.py 8200` is the no-race stand-in for the other two states |
 | tournament server | from anywhere: `DATABASE_PATH=C:/Users/kevin/score-ref/run/fifteenball.db LISTEN_ADDR=127.0.0.1:8093 BASE_URL=http://127.0.0.1:8093 OPEN_MATCH_EDITING=1 C:/Users/kevin/score-ref/15ball-scoresheet/bin/fifteenball-server.exe` |
 | console proxy (mirrors nginx) | from `score`: `python tools/dev-server.py 8080` — serves `/15ball/api/` → `127.0.0.1:8093/api/` |
 | the web app, for clicking through | from the clone: `python -m http.server 8123` → http://127.0.0.1:8123/index.html |
 | seed the fixtures | from `score-ref/15ball-scoresheet/server`: `DATABASE_PATH=C:/Users/kevin/score-ref/run/fifteenball.db <toolchain>/go/bin/go.exe run ./tmp-fixture` — seeds the 15-ball tournament plus `t_race_001` (9-ball, two live matches, tables 4 and 5) and `t_141_001` (14.1, Iris vs Jonah, table 1) |
 
-Drop `OPEN_MATCH_EDITING=1` to exercise the app's read-only path.
+The 8093 rows are the documented local stack (`ScoreConsole` was running it on 2026-10-15); the race run
+deliberately used neither that port nor that DB. Drop `OPEN_MATCH_EDITING=1` to exercise the app's
+read-only path.
 
 `bin/` and `server/tmp-fixture/` are mine and untracked; the fixture's source is copied to
 `verify/tmp-fixture-main.go` here so a `git clean` in the clone cannot destroy it. The AVD
@@ -309,10 +405,15 @@ placeholder squares for exactly that reason, which is worth fixing there one day
 
 ## Still open, unchanged
 
-- Ship the race change: bump to 1.5 / versionCode 6, rebuild both APKs, update the README table and
-  `score-dist` together, cut the release. See the section above for what is deliberately not shipped.
-- Run the race on a device (or the emulator) against a server that has `race_to` — the only way to see
-  the race line, the override dialog and a stored payload with its provenance.
+- **Cut the 1.5 release.** Everything up to it is done: the manifest says 1.5 / 6, both APKs are built,
+  the README artifact table and `score-dist` (README + committed APK) agree with the bytes,
+  `sh tools/check-release.sh --rebuild` is green, and `--online` will only go green once the release
+  exists. Nothing was published; the notes and the tag are Kevin's call.
+- The one race surface still not device-run: the race line on the **read-only fallback** (a tournament that
+  answers 401 on the scoring reads), whose public payload carries no race at all — it draws the same
+  `Race to — · no race from the bracket …` widget verified at `race-14`, and the view-only board itself
+  was verified in 1.4. Cheap to add on the copy named above (a stand-in that answers 401 on the scoring
+  reads and 200 on `/public/tournaments/{id}`).
 - Publish or discard the branch above.
 - `assetlinks.json` on `codeonline.io`, so a scoring link opens the installed app instead of a chooser.
   **Drafted and committed** (`kevinelong/fc` @ `c62a078`, `.well-known/assetlinks.json`, package
@@ -320,8 +421,8 @@ placeholder squares for exactly that reason, which is worth fixing there one day
   `apksigner verify --print-certs`). Not live: the site is this fc clone served by nginx, hidden paths
   all 404 there, so the server block needs an exact-match exception before the file is reachable —
   and the pull on the box is a separate deploy step.
-- The phone trace for 1.4 — the emulator has carried every verification so far; the phone build is a
-  release behind.
+- The phone trace — the emulator has carried every verification so far; the phone build is a release
+  behind, and 1.5 will be the first one worth putting on it.
 - The one-paragraph privacy policy.
 - The **`Not implemented yet (next phase)`** follow-up in `README.md`: open local URLs that carry a
   return URL, and add a `Submit match` button that POSTs the result to a receiver server URL. Kevin's
