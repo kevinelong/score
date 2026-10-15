@@ -15,6 +15,12 @@ app at it with
     adb shell am start -a android.intent.action.VIEW \
       -d "scoreboard://match?url=http%3A%2F%2F10.0.2.2%3A8200%2Flive.html%3Ft%3Dt_old_001"
 
+Two tournaments, because there are two things a server without the race needs to show:
+
+  t_old_001   the scoring reads answer, with no race anywhere        -> "no race from the bracket"
+  t_vo_001    the scoring reads answer 401, as a tournament that is not open for anonymous scoring does,
+              and the anonymous read answers instead                 -> the read-only fallback's board
+
 Every request is logged to stdout, which is the probe trail for what the app actually asked for.
 """
 import json
@@ -33,6 +39,17 @@ TOURNAMENT = {
     "createdBy": "u_director",
     "createdAt": 1767225600,
     "updatedAt": 1767225600,
+    "version": 1,
+}
+
+# The same, for the tournament whose scoring reads are closed: only the anonymous read answers.
+TOURNAMENT_VO = {
+    "id": "t_vo_001",
+    "slug": "t_vo_001",
+    "name": "Thursday 9-Ball (closed to scoring)",
+    "game": "9ball",
+    "state": "in_progress",
+    "visibility": "public",
     "version": 1,
 }
 
@@ -75,6 +92,11 @@ MATCH = {
     "updatedAt": 1767225600,
 }
 
+# The same shape for the closed tournament: also no race, which is what the public read carries.
+MATCH_VO = dict(MATCH, id="m_vo_001_1", tournamentId="t_vo_001", divisionId=None)
+ENTRANTS_VO = [dict(e, tournamentId="t_vo_001", divisionId=None) for e in ENTRANTS]
+
+
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
@@ -93,6 +115,22 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?")[0]
+        if "/public/tournaments/" in path:
+            # The anonymous read answers for both: tournament, entrants and matches in one body.
+            vo = "t_vo_001" in path
+            self.send_json({
+                "tournament": TOURNAMENT_VO if vo else TOURNAMENT,
+                "entrants": ENTRANTS_VO if vo else ENTRANTS,
+                "matches": [MATCH_VO if vo else MATCH],
+            })
+            return
+        if "t_vo_001" in path:
+            # The scoring reads are closed on this tournament, which is what the app's fallback is for.
+            self.send_json({"error": {
+                "code": "forbidden",
+                "message": "This tournament is not open for anonymous scoring",
+            }}, 401)
+            return
         if path.endswith("/matches"):
             self.send_json({"items": [MATCH]})
         elif path.endswith("/entrants"):

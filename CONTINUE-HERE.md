@@ -194,10 +194,10 @@ Three gaps the work left open, deliberately:
    - **The race surfaces are device-run now — closed 2026-10-15.** See *The operator-path race states,
      on the device* below: the override dialog's three buttons, the race line in its `LOCAL OVERRIDE` /
      `set by hand` / `no race from the bracket` states, the `match override` and `discipline default`
-     states, the goal line under a name, and the long line's portrait wrapping all rendered on the AVD,
-     with screenshots and a measured wrap — so all six `linked_race_*` strings have now been seen on a
-     device. What is still *not* device-run: the race line on the read-only fallback (the 401 path),
-     which draws the same `no race from the bracket` widget verified at `race-14`.
+     states, the read-only fallback's board, the goal line under a name, and the long line's portrait
+     wrapping — all rendered on the AVD, with screenshots, a measured wrap and a probe file. Every
+     `linked_race_*` string the app can draw has now been seen on a device, and the APK installed for
+     the run was hashed back to the committed build.
 2. **Built as 1.5, not released — ready for Kevin to cut.** The version moved 1.4/5 → **1.5/6** in the
    manifest, both APKs were rebuilt, the README artifact table and `score-dist` moved with them, and
    `sh tools/check-release.sh --rebuild` proves the digests repeat. Local artifacts: `out/score.apk`
@@ -242,9 +242,16 @@ answers, and is pointed at with the same `scoreboard://match?url=…` link on po
 
 Those last two close the list: with the bracket's race and the division's target from 2026-10-14, **every
 one of the six `linked_race_*` strings has now been rendered on a device**, five of them on the 1.5 build.
-The only race surface never device-run is the race line on the **read-only fallback** (the 401 path), whose
-payload carries no race at all — it draws the same `no race from the bracket` widget verified at
-`race-14`, and the view-only board itself was verified in 1.4 (`race-06-view-only.png`).
+
+The **read-only fallback** was the one race surface left, and it is closed too. The stand-in answers 401
+on the scoring reads — `{"error":{"code":"forbidden","message":"This tournament is not open for anonymous
+scoring"}}` — and the documented anonymous read on `/public/tournaments/{id}` instead, which is the exact
+shape the app's fallback exists for (a public payload carries no race at all). The board came up
+view-only: status `Thursday 9-Ball (closed to scoring) · table 5`, the note `Viewing only — this
+tournament is not open for anonymous scoring, so the result cannot be submitted from here`, the race line
+`Race to — · no race from the bracket — tap to set goals by hand` on **one** painted line, and the submit
+button present but `enabled="false"` in its own widget tree — the race line stays live for a by-hand goal
+while the result cannot leave the phone (`race-19-view-only-race-line.png`).
 
 The stored payload, read back from the copy's `match_results` (v2 of `m_t_race_001_1`):
 
@@ -429,11 +436,9 @@ placeholder squares for exactly that reason, which is worth fixing there one day
   the README artifact table and `score-dist` (README + committed APK) agree with the bytes,
   `sh tools/check-release.sh --rebuild` is green, and `--online` will only go green once the release
   exists. Nothing was published; the notes and the tag are Kevin's call.
-- The one race surface still not device-run: the race line on the **read-only fallback** (a tournament that
-  answers 401 on the scoring reads), whose public payload carries no race at all — it draws the same
-  `Race to — · no race from the bracket …` widget verified at `race-14`, and the view-only board itself
-  was verified in 1.4. Cheap to add on the copy named above (a stand-in that answers 401 on the scoring
-  reads and 200 on `/public/tournaments/{id}`).
+- Nothing is left in the race surfaces themselves — all of them are device-run (see above). The next
+  thing worth doing there is on the server side, not here: a real tournament with a division race set,
+  rather than a copy staged by hand.
 - The clone's seven leftover branches are gone locally (see the clone section); the same six refs still
   exist on `origin` and `git push origin --delete <name>` is Kevin's call. `main` is the only local
   branch, at `43f79f1` plus this round's commit.

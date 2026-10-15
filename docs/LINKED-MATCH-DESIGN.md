@@ -333,9 +333,12 @@ strings. The long `LOCAL OVERRIDE …` line and the `set by hand` line both **wr
 1 vs 2) rather than eyeballed from a screenshot. Screenshots and the full table are in
 `verify/race-0*`/`race-1*.png` and `CONTINUE-HERE.md`, and `verify/race-states-probe.txt` records the
 measurement per screenshot (box height, painted bands, the text that was on screen) alongside the stored
-payload read back from the copy. The one surface still not device-run is the race
-line on the **read-only fallback** (the 401 path), which draws the same `no race from the bracket` widget
-verified there.
+payload read back from the copy. That includes the **read-only fallback**, the last surface that had not
+been seen: against a stand-in that answers 401 on the scoring reads and the anonymous read instead, the
+board comes up view-only with the same `no race from the bracket` line and the submit button disabled
+(`race-19`). So every race surface the app can draw has been rendered on a device, and the APK installed
+for the run was hashed back to the committed build — the stale-binary trap is closed by evidence, not by
+care.
 
 What names the app reads and writes was checked against the landed server rather than trusted: on branch
 `sheet-stack` (commit `2beaaa6`), `resolveRaceTo` in their `internal/api/games.go` returns the layer as

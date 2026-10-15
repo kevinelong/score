@@ -1,5 +1,7 @@
 Probe: the race line's states, read off the device and the copy (2026-10-15)
 build: out/score.apk 83,341 bytes 997ee3765b2ef605a16003131e4c83c5f48a455347f46734744ee381ce875346 (versionCode 6 / 1.5)
+  the APK installed on the AVD hashes to the same bytes (pulled back from /data/app/.../base.apk), so
+  nothing here came off a stale binary - the trap the 2026-10-14 run fell into
 AVD: emulator-5554   server: 127.0.0.1:8199 on %TEMP%\scorerace-states.db   stand-in: tools/older-server.py on 8200
 
 == linked_race text, and the widget's painted line count, per screenshot ==
@@ -15,6 +17,14 @@ race-17-match-override         box 71px tall, 1 painted band(s) [(1956, 1983)]
                                "Race to 9 · the bracket's match override"
 race-18-discipline-default     box 71px tall, 1 painted band(s) [(1955, 1990)]
                                "Race to 7 · the discipline's default, no target set"
+race-19-view-only-race-line    box 71px tall, 1 painted band(s) [(1955, 1990)]
+                               'Race to — · no race from the bracket — tap to set goals by hand'
+
+== the read-only fallback (race-19): the board, from its own widget tree ==
+linked_status  enabled=true  text='Thursday 9-Ball (closed to scoring) · table 5'
+linked_note    enabled=true  text='Viewing only — this tournament is not open for anonymous scoring, so the result cannot be submitted from here'
+linked_race    enabled=true  text='Race to — · no race from the bracket — tap to set goals by hand'
+linked_action  enabled=false text='SUBMIT RESULT'
 
 == the stored payload, read back from the copy's match_results ==
 res_fdd9abc3880acdda726380d1 m_t_race_001_1 v1  (1 fields)
@@ -24,4 +34,4 @@ res_155bdfc3a422657ddad3e7ec m_t_race_001_1 v2  (16 fields)
   keys: score, home, away, homeName, awayName, discipline, app, appVersion, payloadVersion, sheetKind, homeGoal, awayGoal, raceTo, raceOrigin, raceSource, bracketRaceTo
   {"score": "5-0", "home": 5, "away": 0, "homeName": "Casey", "awayName": "Drew", "discipline": "9ball", "app": "score-android", "appVersion": "1.5", "payloadVersion": 2, "sheetKind": "tally", "homeGoal": 5, "awayGoal": 7, "raceTo": 7, "raceOrigin": "override", "raceSource": "division", "bracketRaceTo": 7}
 
-raceFrom present: False   raceOrigin: 'override'   raceSource: 'division'
+raceOrigin 'override', raceSource 'division', raceFrom present: False - the origin key and the layer field do not collide
