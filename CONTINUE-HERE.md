@@ -339,7 +339,10 @@ section that used to stand here asked about is on `main` and pushed:
   deleting those is Kevin's call (`git push origin --delete <name>`).
 - `main` is `43f79f1` (the `raceOrigin` rename) on `2beaaa6` (sheet stack + bracket race) on
   `f088168` (swipe): the "uncommitted race + sheet-payload work" this note used to warn about is
-  committed and pushed, so `git checkout .` in the clone no longer loses anything.
+  committed and pushed, so `git checkout .` in the clone no longer loses anything. This round added
+  `c5f0ead` (the queue and the branch resolution) and `0d55e95` (the decision note for the
+  nameless-stale case); both are on `origin/main`, and the only untracked things left in the clone
+  are Kevin's own `bin/` and `server/tmp-fixture/`.
 
 **Decision 018's printed-sheet queue is built** (unbuilt since 2026-08-16). The per-match lifecycle was
 already in `bracket.js` (`sheetIssuedAt` / `sheetIssueVersion` / `sheetPlayersSnapshot`, `isMatchReady`
